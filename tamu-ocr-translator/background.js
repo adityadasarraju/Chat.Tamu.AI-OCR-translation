@@ -5,6 +5,11 @@ const TAMU_API_URL =
 const DEFAULT_MODEL =
   "protected.gemini-2.5-flash";
 
+const MAX_HISTORY_ITEMS = 5;
+
+/*
+ * Receive messages from the popup and content script.
+ */
 chrome.runtime.onMessage.addListener(
   (message, sender, sendResponse) => {
     if (message.type === "START_TRANSLATION_SELECTION") {
@@ -15,6 +20,8 @@ chrome.runtime.onMessage.addListener(
           });
         })
         .catch((error) => {
+          console.error("Selection startup failed:", error);
+
           sendResponse({
             ok: false,
             error:
@@ -23,6 +30,9 @@ chrome.runtime.onMessage.addListener(
           });
         });
 
+      /*
+       * Keep the message channel open while startSelection() runs.
+       */
       return true;
     }
 
@@ -30,68 +40,13 @@ chrome.runtime.onMessage.addListener(
       message.type === "OCR_REGION_SELECTED" &&
       sender.tab?.id
     ) {
-async function handleSelectedRegion({
-  tabId,
-  windowId,
-  selection
-}) {
-  if (!selection) {
-    throw new Error("No image area was selected.");
-  }
+      handleSelectedRegion({
+        tabId: sender.tab.id,
+        windowId: sender.tab.windowId,
+        selection: message.selection
+      }).catch(async (error) => {
+        console.error("OCR translation failed:", error);
 
-  /*
-   * Capture before displaying a status panel so the panel itself does not
-   * appear in the screenshot.
-   */
-  const screenshotDataUrl =
-    await chrome.tabs.captureVisibleTab(windowId, {
-      format: "png"
-    });
-
-  await sendMessageSafely(tabId, {
-    type: "OCR_SHOW_STATUS",
-    message: "Preparing the selected image..."
-  });
-
-  const cropResponse = await chrome.tabs.sendMessage(
-    tabId,
-    {
-      type: "OCR_CROP_SCREENSHOT",
-      screenshotDataUrl,
-      selection
-    }
-  );
-
-  if (!cropResponse?.ok || !cropResponse.imageDataUrl) {
-    throw new Error(
-      cropResponse?.error ||
-      "Could not crop the selected area."
-    );
-  }
-
-  await sendMessageSafely(tabId, {
-    type: "OCR_SHOW_STATUS",
-    message: "Reading and translating with TAMU AI..."
-  });
-
-  const translatedText = await translateImage(
-    cropResponse.imageDataUrl
-  );
-
-  /*
-   * Save the newest successful translation and retrieve the updated
-   * five-item history.
-   */
-  const history = await addTranslationToHistory(
-    translatedText
-  );
-
-  await sendMessageSafely(tabId, {
-    type: "OCR_SHOW_RESULT",
-    text: translatedText,
-    history
-  });
-}.catch(async (error) => {
         await sendMessageSafely(sender.tab.id, {
           type: "OCR_SHOW_RESULT",
           error:
@@ -102,6 +57,168 @@ async function handleSelectedRegion({
     }
   }
 );
+
+/*
+ * Inject content.js and display the selection overlay.
+ */
+async function startSelection() {
+  const [tab] = await chrome.tabs.query({
+    active: true,
+    currentWindow: true
+  });
+
+  if (!tab?.id) {
+    throw new Error(
+      "No active browser tab was found."
+    );
+  }
+
+  if (!isSupportedPage(tab.url)) {
+    throw new Error(
+      "Chrome does not allow this extension to run on this page. " +
+      "Open a normal HTTPS website and try again."
+    );
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: {
+        tabId: tab.id
+      },
+      files: [
+        "content.js"
+      ]
+    });
+  } catch (error) {
+    throw new Error(
+      "Chrome could not load the selection tool on this page. " +
+      "Refresh the page and try again. Details: " +
+      (error.message || "Unknown script injection error.")
+    );
+  }
+
+  try {
+    const response = await chrome.tabs.sendMessage(
+      tab.id,
+      {
+        type: "OCR_START_SELECTION"
+      }
+    );
+
+    if (!response?.ok) {
+      throw new Error(
+        response?.error ||
+        "The page did not start the selection overlay."
+      );
+    }
+  } catch (error) {
+    throw new Error(
+      "The selection tool was loaded, but the page did not respond. " +
+      "Refresh the webpage and try again. Details: " +
+      (error.message || "Unknown messaging error.")
+    );
+  }
+}
+
+/*
+ * Check whether Chrome allows script injection on the page.
+ */
+function isSupportedPage(url) {
+  if (!url) {
+    return false;
+  }
+
+  const restrictedPrefixes = [
+    "chrome://",
+    "chrome-extension://",
+    "edge://",
+    "about:",
+    "view-source:",
+    "devtools://"
+  ];
+
+  return !restrictedPrefixes.some((prefix) =>
+    url.startsWith(prefix)
+  );
+}
+
+/*
+ * Capture the visible tab, crop the selected region, translate it,
+ * save the translation, and display the result.
+ */
+async function handleSelectedRegion({
+  tabId,
+  windowId,
+  selection
+}) {
+  if (!selection) {
+    throw new Error(
+      "No image area was selected."
+    );
+  }
+
+  /*
+   * Capture before displaying the status panel so the panel itself
+   * is not included in the screenshot.
+   */
+  const screenshotDataUrl =
+    await chrome.tabs.captureVisibleTab(
+      windowId,
+      {
+        format: "png"
+      }
+    );
+
+  await sendMessageSafely(tabId, {
+    type: "OCR_SHOW_STATUS",
+    message: "Preparing the selected image..."
+  });
+
+  const cropResponse =
+    await chrome.tabs.sendMessage(
+      tabId,
+      {
+        type: "OCR_CROP_SCREENSHOT",
+        screenshotDataUrl,
+        selection
+      }
+    );
+
+  if (
+    !cropResponse?.ok ||
+    !cropResponse.imageDataUrl
+  ) {
+    throw new Error(
+      cropResponse?.error ||
+      "Could not crop the selected area."
+    );
+  }
+
+  await sendMessageSafely(tabId, {
+    type: "OCR_SHOW_STATUS",
+    message:
+      "Reading and translating with TAMU AI..."
+  });
+
+  const translatedText = await translateImage(
+    cropResponse.imageDataUrl
+  );
+
+  const history = await addTranslationToHistory(
+    translatedText
+  );
+
+  await sendMessageSafely(tabId, {
+    type: "OCR_SHOW_RESULT",
+    text: translatedText,
+    history
+  });
+}
+
+/*
+ * Save the five most recent successful translations in session storage.
+ * Screenshots and API keys are not included in history.
+ */
 async function addTranslationToHistory(text) {
   const trimmedText =
     typeof text === "string"
@@ -131,13 +248,10 @@ async function addTranslationToHistory(text) {
     createdAt: new Date().toISOString()
   };
 
-  /*
-   * The newest translation is first. Only five entries are retained.
-   */
   const updatedHistory = [
     newEntry,
     ...existingHistory
-  ].slice(0, 5);
+  ].slice(0, MAX_HISTORY_ITEMS);
 
   await chrome.storage.session.set({
     translationHistory: updatedHistory
@@ -145,126 +259,35 @@ async function addTranslationToHistory(text) {
 
   return updatedHistory;
 }
-async function startSelection() {
-  const [tab] = await chrome.tabs.query({
-    active: true,
-    currentWindow: true
-  });
 
-  if (!tab?.id) {
-    throw new Error("No active browser tab was found.");
-  }
-
-  if (!isSupportedPage(tab.url)) {
-    throw new Error(
-      "Chrome does not allow this extension to run on this page. " +
-      "Open a normal website and try again."
-    );
-  }
-
-  await chrome.scripting.executeScript({
-    target: {
-      tabId: tab.id
-    },
-    files: [
-      "content.js"
-    ]
-  });
-
-  await chrome.tabs.sendMessage(tab.id, {
-    type: "OCR_START_SELECTION"
-  });
-}
-
-function isSupportedPage(url) {
-  if (!url) {
-    return false;
-  }
-
-  const restrictedPrefixes = [
-    "chrome://",
-    "chrome-extension://",
-    "edge://",
-    "about:",
-    "view-source:",
-    "devtools://"
-  ];
-
-  return !restrictedPrefixes.some((prefix) =>
-    url.startsWith(prefix)
-  );
-}
-
-async function handleSelectedRegion({
-  tabId,
-  windowId,
-  selection
-}) {
-  if (!selection) {
-    throw new Error("No image area was selected.");
-  }
-
-  /*
-   * Capture the screen before showing the status panel. This prevents the
-   * panel from appearing in the captured image.
-   */
-  const screenshotDataUrl =
-    await chrome.tabs.captureVisibleTab(windowId, {
-      format: "png"
-    });
-
-  await sendMessageSafely(tabId, {
-    type: "OCR_SHOW_STATUS",
-    message: "Preparing the selected image..."
-  });
-
-  const cropResponse = await chrome.tabs.sendMessage(
-    tabId,
-    {
-      type: "OCR_CROP_SCREENSHOT",
-      screenshotDataUrl,
-      selection
-    }
-  );
-
-  if (!cropResponse?.ok || !cropResponse.imageDataUrl) {
-    throw new Error(
-      cropResponse?.error ||
-      "Could not crop the selected area."
-    );
-  }
-
-  await sendMessageSafely(tabId, {
-    type: "OCR_SHOW_STATUS",
-    message: "Reading and translating with TAMU AI..."
-  });
-
-  const translatedText = await translateImage(
-    cropResponse.imageDataUrl
-  );
-
-  await sendMessageSafely(tabId, {
-    type: "OCR_SHOW_RESULT",
-    text: translatedText
-  });
-}
-
+/*
+ * Send the selected image to TAMU AI.
+ */
 async function translateImage(imageDataUrl) {
-  const sessionData = await chrome.storage.session.get([
-    "tamuApiKey"
-  ]);
+  const sessionData =
+    await chrome.storage.session.get([
+      "tamuApiKey"
+    ]);
 
-  const localData = await chrome.storage.local.get([
-    "tamuModel"
-  ]);
+  const localData =
+    await chrome.storage.local.get([
+      "tamuModel"
+    ]);
 
   const apiKey = sessionData.tamuApiKey;
-  const model = localData.tamuModel || DEFAULT_MODEL;
+  const model =
+    localData.tamuModel || DEFAULT_MODEL;
 
   if (!apiKey) {
     throw new Error(
       "Your TAMU AI API key is unavailable. " +
       "Open the extension and enter it again."
+    );
+  }
+
+  if (!imageDataUrl) {
+    throw new Error(
+      "The selected image was empty."
     );
   }
 
@@ -306,16 +329,19 @@ async function translateImage(imageDataUrl) {
   let response;
 
   try {
-    response = await fetch(TAMU_API_URL, {
-      method: "POST",
-      headers: {
-        "accept": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(requestBody)
-    });
-  } catch {
+    response = await fetch(
+      TAMU_API_URL,
+      {
+        method: "POST",
+        headers: {
+          "accept": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(requestBody)
+      }
+    );
+  } catch (error) {
     throw new Error(
       "Could not connect to the TAMU AI API. " +
       "Check your internet connection and try again."
@@ -327,13 +353,27 @@ async function translateImage(imageDataUrl) {
   let data;
 
   try {
-    data = rawResponse
-      ? JSON.parse(rawResponse)
-      : {};
-  } catch {
+    data = parseApiResponse(rawResponse);
+  } catch (error) {
+    console.error(
+      "TAMU response status:",
+      response.status
+    );
+
+    console.error(
+      "TAMU response content type:",
+      response.headers.get("content-type")
+    );
+
+    console.error(
+      "TAMU response preview:",
+      rawResponse.slice(0, 1000)
+    );
+
     throw new Error(
       "TAMU AI returned an unreadable response " +
-      `(HTTP ${response.status}).`
+      `(HTTP ${response.status}). ` +
+      (error.message || "")
     );
   }
 
@@ -345,7 +385,8 @@ async function translateImage(imageDataUrl) {
     );
   }
 
-  const outputText = extractChatCompletionText(data);
+  const outputText =
+    extractChatCompletionText(data);
 
   if (!outputText) {
     throw new Error(
@@ -357,6 +398,153 @@ async function translateImage(imageDataUrl) {
   return outputText.trim();
 }
 
+/*
+ * Parse ordinary JSON, server-sent events, or plain-text responses.
+ */
+function parseApiResponse(rawResponse) {
+  const trimmedResponse =
+    rawResponse.trim();
+
+  if (!trimmedResponse) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(trimmedResponse);
+  } catch {
+    // Continue to fallback formats.
+  }
+
+  if (
+    trimmedResponse.startsWith("data:") ||
+    trimmedResponse.includes("\ndata:")
+  ) {
+    return parseEventStreamResponse(
+      trimmedResponse
+    );
+  }
+
+  /*
+   * Accept a plain-text successful response as translation text.
+   */
+  if (
+    !trimmedResponse.startsWith("<!DOCTYPE") &&
+    !trimmedResponse.startsWith("<html") &&
+    !trimmedResponse.startsWith("<")
+  ) {
+    return {
+      choices: [
+        {
+          message: {
+            content: trimmedResponse
+          }
+        }
+      ]
+    };
+  }
+
+  throw new Error(
+    "The response appears to be HTML instead of API JSON."
+  );
+}
+
+/*
+ * Convert a streaming event response into a chat-completion-like result.
+ */
+function parseEventStreamResponse(rawResponse) {
+  const textParts = [];
+  const lines = rawResponse.split(/\r?\n/);
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+
+    if (!trimmedLine.startsWith("data:")) {
+      continue;
+    }
+
+    const payload =
+      trimmedLine.slice(5).trim();
+
+    if (
+      !payload ||
+      payload === "[DONE]"
+    ) {
+      continue;
+    }
+
+    let eventData;
+
+    try {
+      eventData = JSON.parse(payload);
+    } catch {
+      continue;
+    }
+
+    const deltaContent =
+      eventData?.choices?.[0]?.delta?.content;
+
+    const messageContent =
+      eventData?.choices?.[0]?.message?.content;
+
+    appendContentParts(
+      textParts,
+      deltaContent
+    );
+
+    appendContentParts(
+      textParts,
+      messageContent
+    );
+  }
+
+  if (textParts.length === 0) {
+    throw new Error(
+      "The streaming response did not contain translation text."
+    );
+  }
+
+  return {
+    choices: [
+      {
+        message: {
+          content: textParts.join("")
+        }
+      }
+    ]
+  };
+}
+
+function appendContentParts(
+  textParts,
+  content
+) {
+  if (typeof content === "string") {
+    textParts.push(content);
+    return;
+  }
+
+  if (!Array.isArray(content)) {
+    return;
+  }
+
+  for (const item of content) {
+    if (typeof item === "string") {
+      textParts.push(item);
+    } else if (
+      typeof item?.text === "string"
+    ) {
+      textParts.push(item.text);
+    } else if (
+      typeof item?.content === "string"
+    ) {
+      textParts.push(item.content);
+    }
+  }
+}
+
+/*
+ * Extract the translation from an OpenAI-compatible response.
+ */
 function extractChatCompletionText(data) {
   const content =
     data?.choices?.[0]?.message?.content;
@@ -372,11 +560,15 @@ function extractChatCompletionText(data) {
           return item;
         }
 
-        if (typeof item?.text === "string") {
+        if (
+          typeof item?.text === "string"
+        ) {
           return item.text;
         }
 
-        if (typeof item?.content === "string") {
+        if (
+          typeof item?.content === "string"
+        ) {
           return item.content;
         }
 
@@ -386,17 +578,23 @@ function extractChatCompletionText(data) {
       .join("\n");
   }
 
-  /*
-   * Some compatible gateways may return a top-level text field.
-   */
-  if (typeof data?.output_text === "string") {
+  if (
+    typeof data?.output_text === "string"
+  ) {
     return data.output_text;
   }
 
   return "";
 }
 
-function createApiError(status, data, model) {
+/*
+ * Create user-friendly API errors.
+ */
+function createApiError(
+  status,
+  data,
+  model
+) {
   const apiMessage =
     data?.error?.message ||
     data?.error ||
@@ -404,26 +602,31 @@ function createApiError(status, data, model) {
     data?.message ||
     `TAMU AI returned HTTP ${status}.`;
 
-  const readableMessage = stringifyError(apiMessage);
+  const readableMessage =
+    stringifyError(apiMessage);
 
-  if (status === 400 || status === 422) {
+  if (
+    status === 400 ||
+    status === 422
+  ) {
     return new Error(
       `TAMU AI rejected the request for "${model}". ` +
-      "The model may not support image input or the gateway may require " +
-      `a different image format. Details: ${readableMessage}`
+      "The model may not support image input or the gateway may " +
+      `require a different format. Details: ${readableMessage}`
     );
   }
 
   if (status === 401) {
     return new Error(
-      "TAMU AI rejected the API key. Re-enter a valid, active key."
+      "TAMU AI rejected the API key. " +
+      "Enter a valid, active API key."
     );
   }
 
   if (status === 403) {
     return new Error(
-      "TAMU AI denied access. Check your API key and model permissions. " +
-      `Details: ${readableMessage}`
+      "TAMU AI denied access. Check your API key and model " +
+      `permissions. Details: ${readableMessage}`
     );
   }
 
@@ -436,14 +639,15 @@ function createApiError(status, data, model) {
 
   if (status === 413) {
     return new Error(
-      "The selected screenshot was too large. Select a smaller region."
+      "The selected screenshot was too large. " +
+      "Select a smaller area."
     );
   }
 
   if (status === 429) {
     return new Error(
-      "The TAMU AI request limit was reached. Wait and try again. " +
-      `Details: ${readableMessage}`
+      "The TAMU AI request limit was reached. " +
+      `Wait and try again. Details: ${readableMessage}`
     );
   }
 
@@ -471,7 +675,13 @@ function stringifyError(value) {
   }
 }
 
-async function sendMessageSafely(tabId, message) {
+/*
+ * Send a message without allowing a closed tab to create another error.
+ */
+async function sendMessageSafely(
+  tabId,
+  message
+) {
   try {
     return await chrome.tabs.sendMessage(
       tabId,
