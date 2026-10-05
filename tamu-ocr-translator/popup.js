@@ -1,9 +1,13 @@
-const DEFAULT_MODEL = "protected.gemini-2.0-flash-lite";
+const DEFAULT_MODEL = "protected.gemini-2.5-flash";
 
 const apiKeyInput = document.getElementById("apiKey");
 const modelInput = document.getElementById("model");
-const translateButton = document.getElementById("translateButton");
-const toggleKeyButton = document.getElementById("toggleKey");
+const translateButton = document.getElementById(
+  "translateButton"
+);
+const toggleKeyButton = document.getElementById(
+  "toggleKey"
+);
 const statusElement = document.getElementById("status");
 
 initialize();
@@ -22,7 +26,18 @@ async function initialize() {
       apiKeyInput.value = sessionData.tamuApiKey;
     }
 
-    modelInput.value = localData.tamuModel || DEFAULT_MODEL;
+    const savedModel = localData.tamuModel;
+
+    /*
+     * Only restore the saved model if it still exists in the dropdown.
+     */
+    const savedModelExists = Array.from(
+      modelInput.options
+    ).some((option) => option.value === savedModel);
+
+    modelInput.value = savedModelExists
+      ? savedModel
+      : DEFAULT_MODEL;
   } catch (error) {
     setStatus(
       error.message || "Could not load extension settings.",
@@ -35,12 +50,14 @@ toggleKeyButton.addEventListener("click", () => {
   const keyIsHidden = apiKeyInput.type === "password";
 
   apiKeyInput.type = keyIsHidden ? "text" : "password";
-  toggleKeyButton.textContent = keyIsHidden ? "Hide" : "Show";
+  toggleKeyButton.textContent = keyIsHidden
+    ? "Hide"
+    : "Show";
 });
 
 translateButton.addEventListener("click", async () => {
   const apiKey = apiKeyInput.value.trim();
-  const model = modelInput.value.trim() || DEFAULT_MODEL;
+  const model = modelInput.value || DEFAULT_MODEL;
 
   setStatus("");
 
@@ -49,20 +66,28 @@ translateButton.addEventListener("click", async () => {
     return;
   }
 
+  if (!model) {
+    setStatus("Select an image-input model.", true);
+    return;
+  }
+
   translateButton.disabled = true;
+  toggleKeyButton.disabled = true;
+  modelInput.disabled = true;
+
   setStatus("Starting selection tool...");
 
   try {
     /*
-     * Session storage is cleared when the Chrome session ends.
-     * The API key is not stored permanently in the project files.
+     * The API key is stored in Chrome session storage rather than being
+     * written into a project file.
      */
     await chrome.storage.session.set({
       tamuApiKey: apiKey
     });
 
     /*
-     * The model name is not secret, so it can be retained between sessions.
+     * The model name is not a secret and may persist across sessions.
      */
     await chrome.storage.local.set({
       tamuModel: model
@@ -74,7 +99,8 @@ translateButton.addEventListener("click", async () => {
 
     if (!response?.ok) {
       throw new Error(
-        response?.error || "Could not start the selection tool."
+        response?.error ||
+        "Could not start the selection tool."
       );
     }
 
@@ -86,6 +112,8 @@ translateButton.addEventListener("click", async () => {
     );
 
     translateButton.disabled = false;
+    toggleKeyButton.disabled = false;
+    modelInput.disabled = false;
   }
 });
 
