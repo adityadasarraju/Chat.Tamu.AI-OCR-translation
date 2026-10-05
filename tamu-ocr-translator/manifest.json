@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "TAMU Japanese/Korean OCR Translator",
+  "version": "1.0.0",
+  "description": "Select Japanese or Korean text on a webpage and translate it into English using TAMU AI.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://chat-api.tamu.ai/*"
+  ],
+  "action": {
+    "default_title": "TAMU OCR Translator",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
