@@ -201,6 +201,7 @@ async function translateImage(imageDataUrl) {
     ],
     temperature: 0.1,
     max_tokens: 1200
+    stream: false
   };
 
   let response;
