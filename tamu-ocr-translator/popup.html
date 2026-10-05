@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>TAMU OCR Translator</title>
+
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <main>
+    <h1>TAMU OCR Translator</h1>
+
+    <p class="description">
+      Select Japanese or Korean text visible on the current webpage and
+      translate it into English.
+    </p>
+
+    <label for="apiKey">TAMU AI API key</label>
+
+    <div class="key-row">
+      <input
+        id="apiKey"
+        type="password"
+        placeholder="Enter your TAMU AI API key"
+        autocomplete="off"
+        spellcheck="false"
+      >
+
+      <button
+        id="toggleKey"
+        class="secondary"
+        type="button"
+      >
+        Show
+      </button>
+    </div>
+
+    <label for="model">Vision model</label>
+
+    <input
+      id="model"
+      type="text"
+      value="protected.gemini-2.0-flash-lite"
+      autocomplete="off"
+      spellcheck="false"
+    >
+
+    <button
+      id="translateButton"
+      class="primary"
+      type="button"
+    >
+      Select text to translate
+    </button>
+
+    <p id="status" role="status"></p>
+
+    <p class="privacy">
+      Your API key is stored only for the current Chrome session. The selected
+      screenshot is sent directly to chat-api.tamu.ai.
+    </p>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>
