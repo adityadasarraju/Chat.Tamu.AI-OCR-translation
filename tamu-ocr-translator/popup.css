@@ -14,7 +14,7 @@
 }
 
 body {
-  width: 350px;
+  width: 370px;
   margin: 0;
   background: #111827;
   color: #f9fafb;
@@ -45,7 +45,8 @@ label {
   font-weight: 700;
 }
 
-input {
+input,
+select {
   width: 100%;
   min-width: 0;
   padding: 10px;
@@ -58,9 +59,14 @@ input {
   font-size: 13px;
 }
 
-input:focus {
+input:focus,
+select:focus {
   border-color: #60a5fa;
   box-shadow: 0 0 0 2px rgb(96 165 250 / 20%);
+}
+
+select {
+  cursor: pointer;
 }
 
 .key-row {
@@ -103,8 +109,15 @@ button:disabled {
   color: #ffffff;
 }
 
-.secondary:hover {
+.secondary:hover:not(:disabled) {
   background: #4b5563;
+}
+
+.model-help {
+  margin: 7px 0 0;
+  color: #94a3b8;
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 #status {
