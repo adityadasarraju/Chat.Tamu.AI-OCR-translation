@@ -248,10 +248,21 @@ async function addTranslationToHistory(text) {
     createdAt: new Date().toISOString()
   };
 
+  /*
+   * Sort all entries from oldest to newest.
+   * Keep only the five most recent entries.
+   */
   const updatedHistory = [
-    newEntry,
-    ...existingHistory
-  ].slice(0, MAX_HISTORY_ITEMS);
+    ...existingHistory,
+    newEntry
+  ]
+    .sort((first, second) => {
+      return (
+        new Date(first.createdAt).getTime() -
+        new Date(second.createdAt).getTime()
+      );
+    })
+    .slice(-5);
 
   await chrome.storage.session.set({
     translationHistory: updatedHistory
