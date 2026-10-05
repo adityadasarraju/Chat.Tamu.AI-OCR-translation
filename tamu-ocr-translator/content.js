@@ -1,7 +1,7 @@
 (() => {
   /*
-   * Prevent duplicate event listeners if Chrome injects this file more
-   * than once in the same tab.
+   * Prevent duplicate listeners when this file is injected multiple times
+   * into the same browser tab.
    */
   if (window.__tamuOcrTranslatorLoaded) {
     return;
@@ -10,16 +10,23 @@
   window.__tamuOcrTranslatorLoaded = true;
 
   const IDS = {
-    selectionOverlay: "__tamu_ocr_selection_overlay",
-    selectionBox: "__tamu_ocr_selection_box",
-    resultPanel: "__tamu_ocr_result_panel"
+    selectionOverlay:
+      "__tamu_ocr_selection_overlay",
+    selectionBox:
+      "__tamu_ocr_selection_box",
+    resultPanel:
+      "__tamu_ocr_result_panel"
   };
 
   chrome.runtime.onMessage.addListener(
     (message, sender, sendResponse) => {
       if (message.type === "OCR_START_SELECTION") {
         startSelection();
-        sendResponse({ ok: true });
+
+        sendResponse({
+          ok: true
+        });
+
         return;
       }
 
@@ -51,7 +58,10 @@
           status: message.message || "Working..."
         });
 
-        sendResponse({ ok: true });
+        sendResponse({
+          ok: true
+        });
+
         return;
       }
 
@@ -61,7 +71,9 @@
           error: message.error
         });
 
-        sendResponse({ ok: true });
+        sendResponse({
+          ok: true
+        });
       }
     }
   );
@@ -83,7 +95,8 @@
       touchAction: "none"
     });
 
-    const instructions = document.createElement("div");
+    const instructions =
+      document.createElement("div");
 
     instructions.textContent =
       "Drag around Japanese or Korean text • Press Esc to cancel";
@@ -98,13 +111,16 @@
       borderRadius: "8px",
       background: "#111827",
       color: "#ffffff",
-      boxShadow: "0 8px 30px rgba(0, 0, 0, 0.3)",
+      boxShadow:
+        "0 8px 30px rgba(0, 0, 0, 0.3)",
       font: "600 13px system-ui, sans-serif",
       textAlign: "center",
       pointerEvents: "none"
     });
 
-    const selectionBox = document.createElement("div");
+    const selectionBox =
+      document.createElement("div");
+
     selectionBox.id = IDS.selectionBox;
 
     Object.assign(selectionBox.style, {
@@ -116,8 +132,14 @@
       pointerEvents: "none"
     });
 
-    overlay.append(instructions, selectionBox);
-    document.documentElement.appendChild(overlay);
+    overlay.append(
+      instructions,
+      selectionBox
+    );
+
+    document.documentElement.appendChild(
+      overlay
+    );
 
     let dragging = false;
     let startX = 0;
@@ -151,9 +173,13 @@
       );
 
       try {
-        overlay.setPointerCapture(event.pointerId);
+        overlay.setPointerCapture(
+          event.pointerId
+        );
       } catch {
-        // Pointer capture is helpful but not required.
+        /*
+         * Pointer capture is useful but is not required.
+         */
       }
     };
 
@@ -298,7 +324,9 @@
     selection
   ) {
     if (!screenshotDataUrl) {
-      throw new Error("The screenshot was empty.");
+      throw new Error(
+        "The captured screenshot was empty."
+      );
     }
 
     if (
@@ -306,20 +334,24 @@
       !selection.viewportWidth ||
       !selection.viewportHeight
     ) {
-      throw new Error("The selection information was invalid.");
+      throw new Error(
+        "The selection information was invalid."
+      );
     }
 
-    const image = await loadImage(screenshotDataUrl);
+    const image =
+      await loadImage(screenshotDataUrl);
 
     /*
-     * This scaling is important on Retina Macs, where screenshot pixels
-     * may not equal CSS pixels.
+     * Screenshot pixels may differ from CSS pixels on Retina displays.
      */
     const scaleX =
-      image.naturalWidth / selection.viewportWidth;
+      image.naturalWidth /
+      selection.viewportWidth;
 
     const scaleY =
-      image.naturalHeight / selection.viewportHeight;
+      image.naturalHeight /
+      selection.viewportHeight;
 
     const sourceX = Math.max(
       0,
@@ -347,15 +379,23 @@
       )
     );
 
-    if (sourceWidth <= 0 || sourceHeight <= 0) {
-      throw new Error("The selected image area was invalid.");
+    if (
+      sourceWidth <= 0 ||
+      sourceHeight <= 0
+    ) {
+      throw new Error(
+        "The selected image area was invalid."
+      );
     }
 
-    const canvas = document.createElement("canvas");
+    const canvas =
+      document.createElement("canvas");
+
     canvas.width = sourceWidth;
     canvas.height = sourceHeight;
 
-    const context = canvas.getContext("2d");
+    const context =
+      canvas.getContext("2d");
 
     if (!context) {
       throw new Error(
@@ -391,7 +431,9 @@
 
       image.onerror = () => {
         reject(
-          new Error("Could not load the captured screenshot.")
+          new Error(
+            "Could not load the captured screenshot."
+          )
         );
       };
 
@@ -406,7 +448,9 @@
   }) {
     removeElement(IDS.resultPanel);
 
-    const panel = document.createElement("section");
+    const panel =
+      document.createElement("section");
+
     panel.id = IDS.resultPanel;
 
     Object.assign(panel.style, {
@@ -414,20 +458,26 @@
       top: "18px",
       right: "18px",
       zIndex: "2147483647",
-      width: "min(420px, calc(100vw - 36px))",
-      maxHeight: "calc(100vh - 36px)",
+      width:
+        "min(420px, calc(100vw - 36px))",
+      maxHeight:
+        "calc(100vh - 36px)",
       overflow: "auto",
       boxSizing: "border-box",
       padding: "16px",
-      border: "1px solid rgba(255, 255, 255, 0.14)",
+      border:
+        "1px solid rgba(255, 255, 255, 0.14)",
       borderRadius: "12px",
       background: "#111827",
       color: "#f9fafb",
-      boxShadow: "0 18px 60px rgba(0, 0, 0, 0.45)",
-      font: "14px/1.55 system-ui, sans-serif"
+      boxShadow:
+        "0 18px 60px rgba(0, 0, 0, 0.45)",
+      font:
+        "14px/1.55 system-ui, sans-serif"
     });
 
-    const header = document.createElement("div");
+    const header =
+      document.createElement("div");
 
     Object.assign(header.style, {
       display: "flex",
@@ -437,20 +487,30 @@
       marginBottom: "12px"
     });
 
-    const title = document.createElement("strong");
+    const title =
+      document.createElement("strong");
 
     if (error) {
-      title.textContent = "Translation error";
+      title.textContent =
+        "Translation error";
     } else if (status) {
-      title.textContent = "TAMU OCR Translator";
+      title.textContent =
+        "TAMU OCR Translator";
     } else {
-      title.textContent = "English translation";
+      title.textContent =
+        "English translation";
     }
 
-    const closeButton = document.createElement("button");
+    const closeButton =
+      document.createElement("button");
+
     closeButton.type = "button";
     closeButton.textContent = "×";
-    closeButton.setAttribute("aria-label", "Close");
+
+    closeButton.setAttribute(
+      "aria-label",
+      "Close"
+    );
 
     Object.assign(closeButton.style, {
       width: "30px",
@@ -461,16 +521,25 @@
       cursor: "pointer",
       background: "#374151",
       color: "#ffffff",
-      font: "22px/30px system-ui, sans-serif"
+      font:
+        "22px/30px system-ui, sans-serif"
     });
 
-    closeButton.addEventListener("click", () => {
-      panel.remove();
-    });
+    closeButton.addEventListener(
+      "click",
+      () => {
+        panel.remove();
+      }
+    );
 
-    header.append(title, closeButton);
+    header.append(
+      title,
+      closeButton
+    );
 
-    const body = document.createElement("div");
+    const body =
+      document.createElement("div");
+
     body.textContent =
       error ||
       status ||
@@ -478,17 +547,26 @@
       "No text was returned.";
 
     Object.assign(body.style, {
-      color: error ? "#fca5a5" : "#f3f4f6",
+      color:
+        error
+          ? "#fca5a5"
+          : "#f3f4f6",
       whiteSpace: "pre-wrap",
       overflowWrap: "anywhere"
     });
 
-    panel.append(header, body);
+    panel.append(
+      header,
+      body
+    );
 
     if (text && !error && !status) {
-      const copyButton = document.createElement("button");
+      const copyButton =
+        document.createElement("button");
+
       copyButton.type = "button";
-      copyButton.textContent = "Copy translation";
+      copyButton.textContent =
+        "Copy translation";
 
       Object.assign(copyButton.style, {
         marginTop: "14px",
@@ -498,22 +576,33 @@
         cursor: "pointer",
         background: "#2563eb",
         color: "#ffffff",
-        font: "600 12px system-ui, sans-serif"
+        font:
+          "600 12px system-ui, sans-serif"
       });
 
-      copyButton.addEventListener("click", async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          copyButton.textContent = "Copied";
-        } catch {
-          copyButton.textContent = "Copy failed";
+      copyButton.addEventListener(
+        "click",
+        async () => {
+          try {
+            await navigator.clipboard.writeText(
+              text
+            );
+
+            copyButton.textContent =
+              "Copied";
+          } catch {
+            copyButton.textContent =
+              "Copy failed";
+          }
         }
-      });
+      );
 
       panel.appendChild(copyButton);
     }
 
-    document.documentElement.appendChild(panel);
+    document.documentElement.appendChild(
+      panel
+    );
   }
 
   function removeElement(id) {
