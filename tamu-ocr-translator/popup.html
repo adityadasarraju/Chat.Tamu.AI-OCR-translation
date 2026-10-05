@@ -18,8 +18,7 @@
     <h1>TAMU OCR Translator</h1>
 
     <p class="description">
-      Select Japanese or Korean text visible on the current webpage and
-      translate it into English.
+      Select visible Japanese or Korean text and translate it into English.
     </p>
 
     <label for="apiKey">TAMU AI API key</label>
@@ -42,15 +41,170 @@
       </button>
     </div>
 
-    <label for="model">Vision model</label>
+    <label for="model">Image-input model</label>
 
-    <input
-      id="model"
-      type="text"
-      value="protected.gemini-2.0-flash-lite"
-      autocomplete="off"
-      spellcheck="false"
-    >
+    <select id="model">
+      <optgroup label="Recommended">
+        <option value="protected.gemini-2.5-flash" selected>
+          Gemini 2.5 Flash
+        </option>
+
+        <option value="protected.gpt-4o">
+          GPT-4o
+        </option>
+
+        <option value="protected.gpt-4.1-mini">
+          GPT-4.1 Mini
+        </option>
+
+        <option value="protected.gemini-2.5-pro">
+          Gemini 2.5 Pro
+        </option>
+      </optgroup>
+
+      <optgroup label="OpenAI">
+        <option value="protected.gpt-4.1">
+          GPT-4.1
+        </option>
+
+        <option value="protected.gpt-4.1-mini">
+          GPT-4.1 Mini
+        </option>
+
+        <option value="protected.gpt-4.1-nano">
+          GPT-4.1 Nano
+        </option>
+
+        <option value="protected.gpt-4o">
+          GPT-4o
+        </option>
+
+        <option value="protected.gpt-5">
+          GPT-5
+        </option>
+
+        <option value="protected.gpt-5-mini">
+          GPT-5 Mini
+        </option>
+
+        <option value="protected.gpt-5-nano">
+          GPT-5 Nano
+        </option>
+
+        <option value="protected.gpt-5.1">
+          GPT-5.1
+        </option>
+
+        <option value="protected.gpt-5.2">
+          GPT-5.2
+        </option>
+
+        <option value="protected.gpt-5.4">
+          GPT-5.4
+        </option>
+
+        <option value="protected.gpt-5.4-mini">
+          GPT-5.4 Mini
+        </option>
+
+        <option value="protected.gpt-5.4-nano">
+          GPT-5.4 Nano
+        </option>
+
+        <option value="protected.gpt-5.5">
+          GPT-5.5
+        </option>
+
+        <option value="protected.gpt-5.6-luna">
+          GPT-5.6 Luna
+        </option>
+
+        <option value="protected.gpt-5.6-sol">
+          GPT-5.6 Sol
+        </option>
+
+        <option value="protected.gpt-5.6-terra">
+          GPT-5.6 Terra
+        </option>
+      </optgroup>
+
+      <optgroup label="Google Gemini">
+        <option value="protected.gemini-2.5-flash-lite">
+          Gemini 2.5 Flash Lite
+        </option>
+
+        <option value="protected.gemini-2.5-flash">
+          Gemini 2.5 Flash
+        </option>
+
+        <option value="protected.gemini-2.5-pro">
+          Gemini 2.5 Pro
+        </option>
+
+        <option value="protected.gemini-3.1-flash-lite">
+          Gemini 3.1 Flash Lite
+        </option>
+
+        <option value="protected.gemini-3.5-flash">
+          Gemini 3.5 Flash
+        </option>
+      </optgroup>
+
+      <optgroup label="Anthropic Claude">
+        <option value="protected.Claude 3.5 Haiku">
+          Claude 3.5 Haiku
+        </option>
+
+        <option value="protected.Claude-Haiku-4.5">
+          Claude Haiku 4.5
+        </option>
+
+        <option value="protected.Claude Sonnet 4">
+          Claude Sonnet 4
+        </option>
+
+        <option value="protected.Claude Sonnet 4.5">
+          Claude Sonnet 4.5
+        </option>
+
+        <option value="protected.Claude Sonnet 4.6">
+          Claude Sonnet 4.6
+        </option>
+
+        <option value="protected.Claude-Sonnet-5">
+          Claude Sonnet 5
+        </option>
+
+        <option value="protected.Claude Opus 4.1">
+          Claude Opus 4.1
+        </option>
+
+        <option value="protected.Claude Opus 4.5">
+          Claude Opus 4.5
+        </option>
+
+        <option value="protected.Claude Opus 4.6">
+          Claude Opus 4.6
+        </option>
+
+        <option value="protected.Claude Opus 4.7">
+          Claude Opus 4.7
+        </option>
+
+        <option value="protected.Claude Opus 4.8">
+          Claude Opus 4.8
+        </option>
+
+        <option value="protected.Claude-Opus-5">
+          Claude Opus 5
+        </option>
+      </optgroup>
+    </select>
+
+    <p class="model-help">
+      Start with Gemini 2.5 Flash. If a model rejects image input, select a
+      different model.
+    </p>
 
     <button
       id="translateButton"
