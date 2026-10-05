@@ -65,16 +65,17 @@
         return;
       }
 
-      if (message.type === "OCR_SHOW_RESULT") {
-        showResultPanel({
-          text: message.text,
-          error: message.error
-        });
+     if (message.type === "OCR_SHOW_RESULT") {
+  showResultPanel({
+    text: message.text,
+    error: message.error,
+    history: message.history
+  });
 
-        sendResponse({
-          ok: true
-        });
-      }
+  sendResponse({
+    ok: true
+  });
+}
     }
   );
 
@@ -441,11 +442,466 @@
     });
   }
 
-  function showResultPanel({
-    status,
-    text,
-    error
-  }) {
+function showResultPanel({
+  status,
+  text,
+  error,
+  history = []
+}) {
+  removeElement(IDS.resultPanel);
+
+  const panel =
+    document.createElement("section");
+
+  panel.id = IDS.resultPanel;
+
+  Object.assign(panel.style, {
+    position: "fixed",
+    top: "18px",
+    right: "18px",
+    zIndex: "2147483647",
+    width: "min(460px, calc(100vw - 36px))",
+    maxHeight: "calc(100vh - 36px)",
+    overflow: "auto",
+    boxSizing: "border-box",
+    padding: "16px",
+    border:
+      "1px solid rgba(255, 255, 255, 0.14)",
+    borderRadius: "12px",
+    background: "#111827",
+    color: "#f9fafb",
+    boxShadow:
+      "0 18px 60px rgba(0, 0, 0, 0.45)",
+    font: "14px/1.55 system-ui, sans-serif"
+  });
+
+  const header =
+    document.createElement("div");
+
+  Object.assign(header.style, {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    marginBottom: "12px"
+  });
+
+  const title =
+    document.createElement("strong");
+
+  if (error) {
+    title.textContent = "Translation error";
+  } else if (status) {
+    title.textContent = "TAMU OCR Translator";
+  } else {
+    title.textContent = "English translation";
+  }
+
+  const closeButton =
+    document.createElement("button");
+
+  closeButton.type = "button";
+  closeButton.textContent = "×";
+
+  closeButton.setAttribute(
+    "aria-label",
+    "Close"
+  );
+
+  Object.assign(closeButton.style, {
+    width: "30px",
+    height: "30px",
+    flex: "0 0 auto",
+    padding: "0",
+    border: "0",
+    borderRadius: "6px",
+    cursor: "pointer",
+    background: "#374151",
+    color: "#ffffff",
+    font: "22px/30px system-ui, sans-serif"
+  });
+
+  closeButton.addEventListener(
+    "click",
+    () => {
+      panel.remove();
+    }
+  );
+
+  header.append(
+    title,
+    closeButton
+  );
+
+  const body =
+    document.createElement("div");
+
+  body.textContent =
+    error ||
+    status ||
+    text ||
+    "No text was returned.";
+
+  Object.assign(body.style, {
+    color: error
+      ? "#fca5a5"
+      : "#f3f4f6",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere"
+  });
+
+  panel.append(
+    header,
+    body
+  );
+
+  /*
+   * Only display action buttons after a successful translation.
+   */
+  if (text && !error && !status) {
+    const actions =
+      document.createElement("div");
+
+    Object.assign(actions.style, {
+      display: "flex",
+      gap: "8px",
+      marginTop: "14px"
+    });
+
+    /*
+     * This button is added first, placing it to the left of the copy button.
+     */
+    const newTranslationButton =
+      document.createElement("button");
+
+    newTranslationButton.type = "button";
+    newTranslationButton.textContent =
+      "New translation";
+
+    Object.assign(
+      newTranslationButton.style,
+      {
+        flex: "1",
+        padding: "9px 12px",
+        border: "0",
+        borderRadius: "7px",
+        cursor: "pointer",
+        background: "#374151",
+        color: "#ffffff",
+        font:
+          "600 12px system-ui, sans-serif"
+      }
+    );
+
+    newTranslationButton.addEventListener(
+      "mouseenter",
+      () => {
+        newTranslationButton.style.background =
+          "#4b5563";
+      }
+    );
+
+    newTranslationButton.addEventListener(
+      "mouseleave",
+      () => {
+        newTranslationButton.style.background =
+          "#374151";
+      }
+    );
+
+    newTranslationButton.addEventListener(
+      "click",
+      () => {
+        panel.remove();
+
+        /*
+         * Reuse the selection function already present in content.js.
+         * The API key and selected model remain stored by the extension.
+         */
+        startSelection();
+      }
+    );
+
+    const copyButton =
+      document.createElement("button");
+
+    copyButton.type = "button";
+    copyButton.textContent =
+      "Copy translation";
+
+    Object.assign(copyButton.style, {
+      flex: "1",
+      padding: "9px 12px",
+      border: "0",
+      borderRadius: "7px",
+      cursor: "pointer",
+      background: "#2563eb",
+      color: "#ffffff",
+      font:
+        "600 12px system-ui, sans-serif"
+    });
+
+    copyButton.addEventListener(
+      "mouseenter",
+      () => {
+        copyButton.style.background =
+          "#1d4ed8";
+      }
+    );
+
+    copyButton.addEventListener(
+      "mouseleave",
+      () => {
+        copyButton.style.background =
+          "#2563eb";
+      }
+    );
+
+    copyButton.addEventListener(
+      "click",
+      async () => {
+        try {
+          await navigator.clipboard.writeText(
+            text
+          );
+
+          copyButton.textContent = "Copied";
+
+          setTimeout(() => {
+            if (copyButton.isConnected) {
+              copyButton.textContent =
+                "Copy translation";
+            }
+          }, 1500);
+        } catch {
+          copyButton.textContent =
+            "Copy failed";
+        }
+      }
+    );
+
+    actions.append(
+      newTranslationButton,
+      copyButton
+    );
+
+    panel.appendChild(actions);
+
+    appendTranslationHistory(
+      panel,
+      history
+    );
+  }
+
+  document.documentElement.appendChild(
+    panel
+  );
+}
+  function appendTranslationHistory(
+  panel,
+  history
+) {
+  if (!Array.isArray(history)) {
+    return;
+  }
+
+  /*
+   * The newest result is already displayed at the top of the panel.
+   * Therefore, history entries after index 0 are the previous results.
+   */
+  const previousTranslations =
+    history.slice(1, 5);
+
+  const historySection =
+    document.createElement("section");
+
+  Object.assign(historySection.style, {
+    marginTop: "18px",
+    paddingTop: "14px",
+    borderTop:
+      "1px solid rgba(255, 255, 255, 0.14)"
+  });
+
+  const historyTitle =
+    document.createElement("strong");
+
+  historyTitle.textContent =
+    "Recent translations";
+
+  Object.assign(historyTitle.style, {
+    display: "block",
+    marginBottom: "9px",
+    color: "#e5e7eb",
+    font:
+      "700 12px system-ui, sans-serif"
+  });
+
+  historySection.appendChild(
+    historyTitle
+  );
+
+  if (previousTranslations.length === 0) {
+    const emptyMessage =
+      document.createElement("div");
+
+    emptyMessage.textContent =
+      "Previous translations will appear here.";
+
+    Object.assign(emptyMessage.style, {
+      color: "#94a3b8",
+      font:
+        "12px/1.45 system-ui, sans-serif"
+    });
+
+    historySection.appendChild(
+      emptyMessage
+    );
+  } else {
+    previousTranslations.forEach(
+      (entry, index) => {
+        const historyItem =
+          createHistoryItem(
+            entry,
+            index
+          );
+
+        historySection.appendChild(
+          historyItem
+        );
+      }
+    );
+  }
+
+  panel.appendChild(historySection);
+}
+
+function createHistoryItem(
+  entry,
+  index
+) {
+  const item =
+    document.createElement("div");
+
+  Object.assign(item.style, {
+    marginTop:
+      index === 0 ? "0" : "8px",
+    padding: "10px",
+    border:
+      "1px solid rgba(255, 255, 255, 0.1)",
+    borderRadius: "8px",
+    background: "#1f2937"
+  });
+
+  const itemHeader =
+    document.createElement("div");
+
+  Object.assign(itemHeader.style, {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
+    marginBottom: "6px"
+  });
+
+  const time =
+    document.createElement("span");
+
+  time.textContent =
+    formatHistoryTime(entry?.createdAt);
+
+  Object.assign(time.style, {
+    color: "#94a3b8",
+    font:
+      "10px system-ui, sans-serif"
+  });
+
+  const copyHistoryButton =
+    document.createElement("button");
+
+  copyHistoryButton.type = "button";
+  copyHistoryButton.textContent = "Copy";
+
+  Object.assign(
+    copyHistoryButton.style,
+    {
+      padding: "4px 8px",
+      border: "0",
+      borderRadius: "5px",
+      cursor: "pointer",
+      background: "#374151",
+      color: "#ffffff",
+      font:
+        "600 10px system-ui, sans-serif"
+    }
+  );
+
+  copyHistoryButton.addEventListener(
+    "click",
+    async () => {
+      try {
+        await navigator.clipboard.writeText(
+          entry?.text || ""
+        );
+
+        copyHistoryButton.textContent =
+          "Copied";
+      } catch {
+        copyHistoryButton.textContent =
+          "Failed";
+      }
+    }
+  );
+
+  itemHeader.append(
+    time,
+    copyHistoryButton
+  );
+
+  const itemText =
+    document.createElement("div");
+
+  itemText.textContent =
+    entry?.text ||
+    "No translation text.";
+
+  Object.assign(itemText.style, {
+    maxHeight: "120px",
+    overflow: "auto",
+    color: "#d1d5db",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+    font:
+      "12px/1.45 system-ui, sans-serif"
+  });
+
+  item.append(
+    itemHeader,
+    itemText
+  );
+
+  return item;
+}
+
+function formatHistoryTime(value) {
+  if (!value) {
+    return "Previous translation";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Previous translation";
+  }
+
+  return date.toLocaleTimeString(
+    undefined,
+    {
+      hour: "numeric",
+      minute: "2-digit"
+    }
+  );
+}
+  {
     removeElement(IDS.resultPanel);
 
     const panel =
