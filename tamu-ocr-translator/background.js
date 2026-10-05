@@ -30,11 +30,68 @@ chrome.runtime.onMessage.addListener(
       message.type === "OCR_REGION_SELECTED" &&
       sender.tab?.id
     ) {
-      handleSelectedRegion({
-        tabId: sender.tab.id,
-        windowId: sender.tab.windowId,
-        selection: message.selection
-      }).catch(async (error) => {
+async function handleSelectedRegion({
+  tabId,
+  windowId,
+  selection
+}) {
+  if (!selection) {
+    throw new Error("No image area was selected.");
+  }
+
+  /*
+   * Capture before displaying a status panel so the panel itself does not
+   * appear in the screenshot.
+   */
+  const screenshotDataUrl =
+    await chrome.tabs.captureVisibleTab(windowId, {
+      format: "png"
+    });
+
+  await sendMessageSafely(tabId, {
+    type: "OCR_SHOW_STATUS",
+    message: "Preparing the selected image..."
+  });
+
+  const cropResponse = await chrome.tabs.sendMessage(
+    tabId,
+    {
+      type: "OCR_CROP_SCREENSHOT",
+      screenshotDataUrl,
+      selection
+    }
+  );
+
+  if (!cropResponse?.ok || !cropResponse.imageDataUrl) {
+    throw new Error(
+      cropResponse?.error ||
+      "Could not crop the selected area."
+    );
+  }
+
+  await sendMessageSafely(tabId, {
+    type: "OCR_SHOW_STATUS",
+    message: "Reading and translating with TAMU AI..."
+  });
+
+  const translatedText = await translateImage(
+    cropResponse.imageDataUrl
+  );
+
+  /*
+   * Save the newest successful translation and retrieve the updated
+   * five-item history.
+   */
+  const history = await addTranslationToHistory(
+    translatedText
+  );
+
+  await sendMessageSafely(tabId, {
+    type: "OCR_SHOW_RESULT",
+    text: translatedText,
+    history
+  });
+}.catch(async (error) => {
         await sendMessageSafely(sender.tab.id, {
           type: "OCR_SHOW_RESULT",
           error:
@@ -45,7 +102,49 @@ chrome.runtime.onMessage.addListener(
     }
   }
 );
+async function addTranslationToHistory(text) {
+  const trimmedText =
+    typeof text === "string"
+      ? text.trim()
+      : "";
 
+  if (!trimmedText) {
+    return [];
+  }
+
+  const storedData =
+    await chrome.storage.session.get([
+      "translationHistory"
+    ]);
+
+  const existingHistory = Array.isArray(
+    storedData.translationHistory
+  )
+    ? storedData.translationHistory
+    : [];
+
+  const newEntry = {
+    id:
+      `${Date.now()}-` +
+      Math.random().toString(36).slice(2),
+    text: trimmedText,
+    createdAt: new Date().toISOString()
+  };
+
+  /*
+   * The newest translation is first. Only five entries are retained.
+   */
+  const updatedHistory = [
+    newEntry,
+    ...existingHistory
+  ].slice(0, 5);
+
+  await chrome.storage.session.set({
+    translationHistory: updatedHistory
+  });
+
+  return updatedHistory;
+}
 async function startSelection() {
   const [tab] = await chrome.tabs.query({
     active: true,
