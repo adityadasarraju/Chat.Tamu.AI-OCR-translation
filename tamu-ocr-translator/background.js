@@ -1,15 +1,18 @@
 const TAMU_API_URL =
-  "https://chat-api.tamu.ai/openai/chat/completions";
+  "https://chat-api.tamu.ai/openai/chat/completions" +
+  "?bypass_system_prompt=false";
 
 const DEFAULT_MODEL =
-  "protected.gemini-2.0-flash-lite";
+  "protected.gemini-2.5-flash";
 
 chrome.runtime.onMessage.addListener(
   (message, sender, sendResponse) => {
     if (message.type === "START_TRANSLATION_SELECTION") {
       startSelection()
         .then(() => {
-          sendResponse({ ok: true });
+          sendResponse({
+            ok: true
+          });
         })
         .catch((error) => {
           sendResponse({
@@ -60,10 +63,6 @@ async function startSelection() {
     );
   }
 
-  /*
-   * Inject the content script when the user starts the tool.
-   * content.js contains a guard that prevents duplicate initialization.
-   */
   await chrome.scripting.executeScript({
     target: {
       tabId: tab.id
@@ -88,7 +87,8 @@ function isSupportedPage(url) {
     "chrome-extension://",
     "edge://",
     "about:",
-    "view-source:"
+    "view-source:",
+    "devtools://"
   ];
 
   return !restrictedPrefixes.some((prefix) =>
@@ -101,9 +101,13 @@ async function handleSelectedRegion({
   windowId,
   selection
 }) {
+  if (!selection) {
+    throw new Error("No image area was selected.");
+  }
+
   /*
-   * Capture before displaying a status panel so the panel itself does not
-   * appear inside the screenshot.
+   * Capture the screen before showing the status panel. This prevents the
+   * panel from appearing in the captured image.
    */
   const screenshotDataUrl =
     await chrome.tabs.captureVisibleTab(windowId, {
@@ -115,11 +119,14 @@ async function handleSelectedRegion({
     message: "Preparing the selected image..."
   });
 
-  const cropResponse = await chrome.tabs.sendMessage(tabId, {
-    type: "OCR_CROP_SCREENSHOT",
-    screenshotDataUrl,
-    selection
-  });
+  const cropResponse = await chrome.tabs.sendMessage(
+    tabId,
+    {
+      type: "OCR_CROP_SCREENSHOT",
+      screenshotDataUrl,
+      selection
+    }
+  );
 
   if (!cropResponse?.ok || !cropResponse.imageDataUrl) {
     throw new Error(
@@ -165,8 +172,9 @@ async function translateImage(imageDataUrl) {
   const prompt = [
     "Perform OCR on the attached image.",
     "The image may contain Japanese, Korean, or both languages.",
-    "Translate all readable Japanese and Korean text into natural English.",
+    "Translate every readable Japanese and Korean passage into natural English.",
     "Preserve line breaks, dialogue order, labels, and general structure.",
+    "For vertical Japanese text, determine the natural reading order.",
     "Do not provide commentary, explanations, or Markdown code fences.",
     "If a small portion is unreadable, replace only that portion with [unreadable].",
     "Return only the English translation."
@@ -201,13 +209,13 @@ async function translateImage(imageDataUrl) {
     response = await fetch(TAMU_API_URL, {
       method: "POST",
       headers: {
+        "accept": "application/json",
         "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Content-Type": "application/json"
       },
       body: JSON.stringify(requestBody)
     });
-  } catch (error) {
+  } catch {
     throw new Error(
       "Could not connect to the TAMU AI API. " +
       "Check your internet connection and try again."
@@ -219,24 +227,30 @@ async function translateImage(imageDataUrl) {
   let data;
 
   try {
-    data = rawResponse ? JSON.parse(rawResponse) : {};
+    data = rawResponse
+      ? JSON.parse(rawResponse)
+      : {};
   } catch {
     throw new Error(
-      `TAMU AI returned an unreadable response ` +
+      "TAMU AI returned an unreadable response " +
       `(HTTP ${response.status}).`
     );
   }
 
   if (!response.ok) {
-    throw createApiError(response.status, data);
+    throw createApiError(
+      response.status,
+      data,
+      model
+    );
   }
 
   const outputText = extractChatCompletionText(data);
 
   if (!outputText) {
     throw new Error(
-      "TAMU AI returned no translation. " +
-      "Make sure the selected model supports image input."
+      `The model "${model}" returned no translation. ` +
+      "Try a different image-input model."
     );
   }
 
@@ -244,7 +258,8 @@ async function translateImage(imageDataUrl) {
 }
 
 function extractChatCompletionText(data) {
-  const content = data?.choices?.[0]?.message?.content;
+  const content =
+    data?.choices?.[0]?.message?.content;
 
   if (typeof content === "string") {
     return content;
@@ -271,42 +286,70 @@ function extractChatCompletionText(data) {
       .join("\n");
   }
 
+  /*
+   * Some compatible gateways may return a top-level text field.
+   */
+  if (typeof data?.output_text === "string") {
+    return data.output_text;
+  }
+
   return "";
 }
 
-function createApiError(status, data) {
+function createApiError(status, data, model) {
   const apiMessage =
     data?.error?.message ||
+    data?.error ||
     data?.detail ||
     data?.message ||
     `TAMU AI returned HTTP ${status}.`;
 
   const readableMessage = stringifyError(apiMessage);
 
+  if (status === 400 || status === 422) {
+    return new Error(
+      `TAMU AI rejected the request for "${model}". ` +
+      "The model may not support image input or the gateway may require " +
+      `a different image format. Details: ${readableMessage}`
+    );
+  }
+
   if (status === 401) {
     return new Error(
-      "TAMU AI rejected the API key. " +
-      "Check that the key is correct and active."
+      "TAMU AI rejected the API key. Re-enter a valid, active key."
     );
   }
 
   if (status === 403) {
     return new Error(
-      "TAMU AI denied access. Check your key, account permissions, " +
-      `and model access. Details: ${readableMessage}`
+      "TAMU AI denied access. Check your API key and model permissions. " +
+      `Details: ${readableMessage}`
     );
   }
 
   if (status === 404) {
     return new Error(
-      "The TAMU AI chat-completions endpoint or selected model was not found. " +
+      `The endpoint or model "${model}" was not found. ` +
       `Details: ${readableMessage}`
+    );
+  }
+
+  if (status === 413) {
+    return new Error(
+      "The selected screenshot was too large. Select a smaller region."
     );
   }
 
   if (status === 429) {
     return new Error(
       "The TAMU AI request limit was reached. Wait and try again. " +
+      `Details: ${readableMessage}`
+    );
+  }
+
+  if (status >= 500) {
+    return new Error(
+      "The TAMU AI service encountered a server error. " +
       `Details: ${readableMessage}`
     );
   }
@@ -330,7 +373,10 @@ function stringifyError(value) {
 
 async function sendMessageSafely(tabId, message) {
   try {
-    return await chrome.tabs.sendMessage(tabId, message);
+    return await chrome.tabs.sendMessage(
+      tabId,
+      message
+    );
   } catch (error) {
     console.warn(
       "Could not send a message to the page:",
