@@ -804,6 +804,8 @@
       document.createElement(
         "div"
       );
+    scrollingBody.dataset.tamuHistoryScroll =
+  "true";
 
     Object.assign(
       scrollingBody.style,
@@ -1099,14 +1101,62 @@
 
     keepPanelOnScreen(panel);
 
-    if (!error && !status) {
-      requestAnimationFrame(() => {
-        scrollingBody.scrollTop =
-          scrollingBody.scrollHeight;
-      });
-    }
+if (!error && !status) {
+  scrollToNewestTranslation(
+    scrollingBody
+  );
+}
+  }
+function scrollToNewestTranslation(
+  scrollingBody
+) {
+  if (!scrollingBody) {
+    return;
   }
 
+  const scrollToBottom = (
+    behavior = "auto"
+  ) => {
+    if (!scrollingBody.isConnected) {
+      return;
+    }
+
+    scrollingBody.scrollTo({
+      top: scrollingBody.scrollHeight,
+      behavior
+    });
+  };
+
+  /*
+   * First scroll immediately after the panel is rendered.
+   */
+  requestAnimationFrame(() => {
+    scrollToBottom("auto");
+
+    /*
+     * Scroll again after the browser completes another layout pass.
+     */
+    requestAnimationFrame(() => {
+      scrollToBottom("smooth");
+    });
+  });
+
+  /*
+   * Screenshot previews can increase the history height after loading.
+   * Repeat the scroll so the newest translation remains visible.
+   */
+  setTimeout(() => {
+    scrollToBottom("smooth");
+  }, 150);
+
+  setTimeout(() => {
+    scrollToBottom("smooth");
+  }, 500);
+
+  setTimeout(() => {
+    scrollToBottom("smooth");
+  }, 1000);
+}
   function createHistoryItem(entry) {
     const item =
       document.createElement(
@@ -1280,6 +1330,22 @@
 
       previewImage.src =
         entry.imageDataUrl;
+      previewImage.addEventListener(
+  "load",
+  () => {
+    const scrollingBody =
+      document.getElementById(
+        IDS.resultPanel
+      )?.querySelector(
+        '[data-tamu-history-scroll="true"]'
+      );
+
+    if (scrollingBody) {
+      scrollingBody.scrollTop =
+        scrollingBody.scrollHeight;
+    }
+  }
+);
 
       previewImage.alt =
         "Screenshot used for this translation";
