@@ -13,6 +13,11 @@ const translateButton =
 const historyButton =
   document.getElementById("historyButton");
 
+const resetHistoryButton =
+  document.getElementById(
+    "resetHistoryButton"
+  );
+
 const toggleKeyButton =
   document.getElementById("toggleKey");
 
@@ -231,6 +236,53 @@ historyButton.addEventListener(
   }
 );
 
+resetHistoryButton.addEventListener(
+  "click",
+  async () => {
+    const confirmed = window.confirm(
+      "Reset translation history?\n\n" +
+      "This will permanently clear the five saved translations " +
+      "and reset the history panel's size and location."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setControlsDisabled(true);
+    setStatus(
+      "Resetting translation history..."
+    );
+
+    try {
+      const response =
+        await chrome.runtime.sendMessage({
+          type:
+            "RESET_TRANSLATION_HISTORY"
+        });
+
+      if (!response?.ok) {
+        throw new Error(
+          response?.error ||
+          "Could not reset translation history."
+        );
+      }
+
+      setStatus(
+        "Translation history and panel layout were reset."
+      );
+    } catch (error) {
+      setStatus(
+        error?.message ||
+        "Could not reset translation history.",
+        true
+      );
+    } finally {
+      setControlsDisabled(false);
+    }
+  }
+);
+
 async function saveEnhancementSettings() {
   try {
     await chrome.storage.local.set({
@@ -285,6 +337,7 @@ function setControlsDisabled(disabled) {
   toggleKeyButton.disabled = disabled;
   aiProofreaderInput.disabled = disabled;
   smoothDialogueInput.disabled = disabled;
+  resetHistoryButton.disabled = disabled;
 }
 
 function setStatus(
