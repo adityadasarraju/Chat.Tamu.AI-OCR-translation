@@ -370,8 +370,8 @@ async function translateImage(imageDataUrl) {
 
   const prompt = [
     "Perform OCR on the attached image.",
-    "The image may contain Japanese, Korean, or both languages.",
-    "Translate every readable Japanese and Korean passage into natural English.",
+    "The image may contain foreign languages that are not english.",
+    "Translate every character into natural English.",
     "Preserve line breaks, dialogue order, labels, and general structure.",
     "For vertical Japanese text, determine the natural reading order.",
     "Do not provide commentary, explanations, or Markdown code fences.",
