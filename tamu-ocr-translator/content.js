@@ -15,6 +15,7 @@
     imageModal:
       "__tamu_ocr_image_modal"
   };
+ 
   const PANEL_GEOMETRY_KEY =
   "translationPanelGeometry";
 
@@ -51,6 +52,30 @@ chrome.storage.local
 
         return;
       }
+      if (
+  message.type ===
+  "OCR_RESET_HISTORY_UI"
+) {
+  /*
+   * Forget the previously loaded size and position in this tab.
+   */
+  cachedPanelGeometry = null;
+
+  /*
+   * Close the existing history panel and enlarged-image overlay.
+   */
+  removeElement(
+    IDS.resultPanel
+  );
+
+  removeImageModal();
+
+  sendResponse({
+    ok: true
+  });
+
+  return;
+}
 
       if (message.type === "OCR_CROP_SCREENSHOT") {
         cropScreenshot(
