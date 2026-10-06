@@ -11,7 +11,8 @@ const toggleKeyButton = document.getElementById(
 const statusElement = document.getElementById("status");
 
 initialize();
-
+const historyButton =
+  document.getElementById("historyButton");
 async function initialize() {
   try {
     const sessionData = await chrome.storage.session.get([
@@ -74,7 +75,34 @@ translateButton.addEventListener("click", async () => {
   translateButton.disabled = true;
   toggleKeyButton.disabled = true;
   modelInput.disabled = true;
+historyButton.addEventListener(
+  "click",
+  async () => {
+    setStatus("Opening translation history...");
 
+    try {
+      const response =
+        await chrome.runtime.sendMessage({
+          type: "SHOW_TRANSLATION_HISTORY"
+        });
+
+      if (!response?.ok) {
+        throw new Error(
+          response?.error ||
+          "Could not show translation history."
+        );
+      }
+
+      window.close();
+    } catch (error) {
+      setStatus(
+        error?.message ||
+        "Could not show translation history.",
+        true
+      );
+    }
+  }
+);
   setStatus("Starting selection tool...");
 
   try {
