@@ -12,11 +12,17 @@ const MAX_HISTORY_ITEMS = 5;
 
 chrome.runtime.onMessage.addListener(
   (message, sender, sendResponse) => {
-    if (!message || typeof message.type !== "string") {
+    if (
+      !message ||
+      typeof message.type !== "string"
+    ) {
       return false;
     }
 
-    if (message.type === "START_TRANSLATION_SELECTION") {
+    if (
+      message.type ===
+      "START_TRANSLATION_SELECTION"
+    ) {
       startSelection()
         .then(() => {
           sendResponse({
@@ -40,7 +46,10 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
-    if (message.type === "SHOW_TRANSLATION_HISTORY") {
+    if (
+      message.type ===
+      "SHOW_TRANSLATION_HISTORY"
+    ) {
       showTranslationHistory()
         .then((history) => {
           sendResponse({
@@ -65,7 +74,10 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
-    if (message.type === "GET_TRANSLATION_HISTORY") {
+    if (
+      message.type ===
+      "GET_TRANSLATION_HISTORY"
+    ) {
       getTranslationHistory()
         .then((history) => {
           sendResponse({
@@ -85,7 +97,10 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
-    if (message.type === "CLEAR_TRANSLATION_HISTORY") {
+    if (
+      message.type ===
+      "CLEAR_TRANSLATION_HISTORY"
+    ) {
       clearTranslationHistory()
         .then(() => {
           sendResponse({
@@ -106,7 +121,8 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (
-      message.type === "OCR_REGION_SELECTED" &&
+      message.type ===
+        "OCR_REGION_SELECTED" &&
       sender.tab?.id
     ) {
       handleSelectedRegion({
@@ -147,14 +163,15 @@ async function startSelection() {
     await chrome.tabs.sendMessage(
       tab.id,
       {
-        type: "OCR_START_SELECTION"
+        type:
+          "OCR_START_SELECTION"
       }
     );
 
   if (!response?.ok) {
     throw new Error(
       response?.error ||
-      "The page could not start the selection tool."
+        "The page could not start the selection tool."
     );
   }
 }
@@ -180,7 +197,7 @@ async function showTranslationHistory() {
   if (!response?.ok) {
     throw new Error(
       response?.error ||
-      "The page could not display translation history."
+        "The page could not display translation history."
     );
   }
 
@@ -203,7 +220,7 @@ async function getActiveSupportedTab() {
   if (!isSupportedPage(tab.url)) {
     throw new Error(
       "Chrome does not allow this extension to run on this page. " +
-      "Open a normal website and try again."
+        "Open a normal website and try again."
     );
   }
 
@@ -223,8 +240,11 @@ async function ensureContentScript(tabId) {
   } catch (error) {
     throw new Error(
       "Chrome could not load the translation interface on this page. " +
-      "Refresh the webpage and try again. Details: " +
-      (error?.message || "Unknown injection error.")
+        "Refresh the webpage and try again. Details: " +
+        (
+          error?.message ||
+          "Unknown injection error."
+        )
     );
   }
 }
@@ -244,7 +264,9 @@ function isSupportedPage(url) {
   ];
 
   return !restrictedPrefixes.some(
-    (prefix) => url.startsWith(prefix)
+    (prefix) => {
+      return url.startsWith(prefix);
+    }
   );
 }
 
@@ -260,8 +282,8 @@ async function handleSelectedRegion({
   }
 
   /*
-   * Capture before showing the status panel so the extension interface
-   * is not included in the screenshot.
+   * Capture before showing a status panel so the extension interface
+   * does not appear in the screenshot.
    */
   const screenshotDataUrl =
     await chrome.tabs.captureVisibleTab(
@@ -293,7 +315,7 @@ async function handleSelectedRegion({
   ) {
     throw new Error(
       cropResponse?.error ||
-      "Could not crop the selected area."
+        "Could not crop the selected area."
     );
   }
 
@@ -352,7 +374,8 @@ async function getTranslationHistory() {
           ? entry.id
           : createHistoryId(),
 
-      text: entry.text.trim(),
+      text:
+        entry.text.trim(),
 
       imageDataUrl:
         typeof entry.imageDataUrl === "string"
@@ -400,9 +423,6 @@ async function addTranslationToHistory(
       new Date().toISOString()
   };
 
-  /*
-   * History is stored oldest-to-newest.
-   */
   let updatedHistory = [
     ...existingHistory,
     newEntry
@@ -429,10 +449,6 @@ async function addTranslationToHistory(
     );
   }
 
-  /*
-   * If images make history too large, remove the oldest entries until
-   * storage succeeds.
-   */
   while (updatedHistory.length > 1) {
     updatedHistory =
       updatedHistory.slice(1);
@@ -445,13 +461,10 @@ async function addTranslationToHistory(
 
       return updatedHistory;
     } catch {
-      // Continue removing older entries.
+      // Keep removing older entries until the history fits.
     }
   }
 
-  /*
-   * Final fallback: retain the newest translation without its image.
-   */
   const textOnlyEntry = {
     ...newEntry,
     imageDataUrl: ""
@@ -484,7 +497,9 @@ function createHistoryId() {
 
   return (
     `${Date.now()}-` +
-    Math.random().toString(36).slice(2)
+    Math.random()
+      .toString(36)
+      .slice(2)
   );
 }
 
@@ -509,7 +524,9 @@ async function translateImage(
 
   const localData =
     await chrome.storage.local.get([
-      "tamuModel"
+      "tamuModel",
+      "aiProofreader",
+      "smoothDialogue"
     ]);
 
   const apiKey =
@@ -519,10 +536,16 @@ async function translateImage(
     localData.tamuModel ||
     DEFAULT_MODEL;
 
+  const aiProofreader =
+    localData.aiProofreader === true;
+
+  const smoothDialogue =
+    localData.smoothDialogue === true;
+
   if (!apiKey) {
     throw new Error(
       "Your TAMU AI API key is unavailable. " +
-      "Open the extension and enter it again."
+        "Open the extension and enter it again."
     );
   }
 
@@ -532,19 +555,66 @@ async function translateImage(
     );
   }
 
-  const prompt = [
+  const promptParts = [
     "Perform OCR on the attached image.",
     "The image may contain Japanese, Korean, or another non-English language.",
     "Translate every readable non-English passage into natural English.",
-    "Preserve line breaks, dialogue order, labels, and general structure.",
+    "Preserve dialogue order, labels, names, and the general structure.",
     "For vertical Japanese text, determine the natural reading order.",
     "Translate all readable text from the beginning to the end of the image.",
     "Do not stop in the middle of a sentence.",
-    "Before responding, verify that every readable text region has been translated.",
     "Do not provide commentary, explanations, or Markdown code fences.",
-    "If a small portion is unreadable, replace only that portion with [unreadable].",
-    "Return only the complete English translation."
-  ].join(" ");
+    "If a small portion is unreadable, replace only that portion with [unreadable]."
+  ];
+
+  if (aiProofreader) {
+    promptParts.push(
+      "After translating, silently proofread the English.",
+      "Correct grammar, punctuation, awkward phrasing, and sentence structure.",
+      "Make the English clear and natural without changing the original meaning, names, tone, or level of formality."
+    );
+  } else {
+    promptParts.push(
+      "Keep the English accurate and natural, but do not substantially rewrite it."
+    );
+  }
+
+  if (smoothDialogue) {
+    const previousHistory =
+      await getTranslationHistory();
+
+    const dialogueContext =
+      buildDialogueContext(
+        previousHistory
+      );
+
+    promptParts.push(
+      "Use the previous translations below only as context for continuity.",
+      "Keep names, pronouns, terminology, speaking style, tone, and ongoing dialogue consistent.",
+      "Do not repeat or output the previous translations.",
+      "Only output the translation of the newly attached image."
+    );
+
+    if (dialogueContext) {
+      promptParts.push(
+        "Previous translation context:",
+        dialogueContext,
+        "End of previous translation context."
+      );
+    } else {
+      promptParts.push(
+        "There are no previous translations yet, so translate the current image normally."
+      );
+    }
+  }
+
+  promptParts.push(
+    "Before responding, verify that every readable text region in the current image has been translated.",
+    "Return only the complete English translation of the current image."
+  );
+
+  const prompt =
+    promptParts.join("\n");
 
   const requestBody = {
     model,
@@ -565,7 +635,11 @@ async function translateImage(
         ]
       }
     ],
-    temperature: 0.1,
+    temperature:
+      aiProofreader ||
+      smoothDialogue
+        ? 0.2
+        : 0.1,
     max_tokens: 4000,
     stream: false
   };
@@ -578,7 +652,8 @@ async function translateImage(
       {
         method: "POST",
         headers: {
-          accept: "application/json",
+          accept:
+            "application/json",
           Authorization:
             `Bearer ${apiKey}`,
           "Content-Type":
@@ -591,7 +666,7 @@ async function translateImage(
   } catch {
     throw new Error(
       "Could not connect to the TAMU AI API. " +
-      "Check your internet connection and try again."
+        "Check your internet connection and try again."
     );
   }
 
@@ -602,7 +677,9 @@ async function translateImage(
 
   try {
     data =
-      parseApiResponse(rawResponse);
+      parseApiResponse(
+        rawResponse
+      );
   } catch (error) {
     console.error(
       "TAMU response status:",
@@ -623,8 +700,8 @@ async function translateImage(
 
     throw new Error(
       "TAMU AI returned an unreadable response " +
-      `(HTTP ${response.status}). ` +
-      (error?.message || "")
+        `(HTTP ${response.status}). ` +
+        (error?.message || "")
     );
   }
 
@@ -640,28 +717,62 @@ async function translateImage(
     extractChatCompletionText(data);
 
   const finishReason =
-    data?.choices?.[0]?.finish_reason;
+    data?.choices?.[0]
+      ?.finish_reason;
 
   if (finishReason === "length") {
     throw new Error(
       "The translation reached the model's output limit. " +
-      "Select a smaller region or try a model with a larger output limit."
+        "Select a smaller region or try a model with a larger output limit."
     );
   }
 
   if (!outputText) {
     throw new Error(
       `The model "${model}" returned no translation. ` +
-      "Try a different image-input model."
+        "Try a different image-input model."
     );
   }
 
   return outputText.trim();
 }
 
-function parseApiResponse(
-  rawResponse
-) {
+function buildDialogueContext(history) {
+  if (!Array.isArray(history)) {
+    return "";
+  }
+
+  /*
+   * Limit each prior translation to prevent context from growing without
+   * bound. The history already contains at most five translations.
+   */
+  return history
+    .slice(-MAX_HISTORY_ITEMS)
+    .map((entry, index) => {
+      const text =
+        typeof entry?.text === "string"
+          ? entry.text.trim()
+          : "";
+
+      if (!text) {
+        return "";
+      }
+
+      const shortenedText =
+        text.length > 2500
+          ? `${text.slice(0, 2500)}…`
+          : text;
+
+      return (
+        `Previous translation ${index + 1}:\n` +
+        shortenedText
+      );
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function parseApiResponse(rawResponse) {
   const trimmed =
     rawResponse.trim();
 
@@ -672,7 +783,7 @@ function parseApiResponse(
   try {
     return JSON.parse(trimmed);
   } catch {
-    // Try streaming or plain-text formats.
+    // Try streaming and plain-text formats below.
   }
 
   if (
@@ -801,9 +912,7 @@ function appendContentParts(
   }
 }
 
-function extractChatCompletionText(
-  data
-) {
+function extractChatCompletionText(data) {
   const content =
     data?.choices?.[0]
       ?.message?.content;
@@ -867,29 +976,29 @@ function createApiError(
   ) {
     return new Error(
       `TAMU AI rejected the request for "${model}". ` +
-      "The model may not support image input. " +
-      `Details: ${readableMessage}`
+        "The model may not support image input. " +
+        `Details: ${readableMessage}`
     );
   }
 
   if (status === 401) {
     return new Error(
       "TAMU AI rejected the API key. " +
-      "Enter a valid, active key."
+        "Enter a valid, active key."
     );
   }
 
   if (status === 403) {
     return new Error(
       "TAMU AI denied access. Check your key and model permissions. " +
-      `Details: ${readableMessage}`
+        `Details: ${readableMessage}`
     );
   }
 
   if (status === 404) {
     return new Error(
       `The endpoint or model "${model}" was not found. ` +
-      `Details: ${readableMessage}`
+        `Details: ${readableMessage}`
     );
   }
 
@@ -902,14 +1011,14 @@ function createApiError(
   if (status === 429) {
     return new Error(
       "The TAMU AI request limit was reached. Wait and try again. " +
-      `Details: ${readableMessage}`
+        `Details: ${readableMessage}`
     );
   }
 
   if (status >= 500) {
     return new Error(
       "The TAMU AI service encountered a server error. " +
-      `Details: ${readableMessage}`
+        `Details: ${readableMessage}`
     );
   }
 
