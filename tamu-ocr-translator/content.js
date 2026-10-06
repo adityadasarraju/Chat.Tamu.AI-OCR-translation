@@ -983,10 +983,218 @@
       : 0;
   }
 
-  function createHistoryItem(
-    entry,
-    index
+function createHistoryItem(entry, index) {
+  const item = document.createElement("article");
+
+  Object.assign(item.style, {
+    padding: "10px",
+    border:
+      "1px solid rgba(255, 255, 255, 0.1)",
+    borderRadius: "8px",
+    background: "#1f2937"
+  });
+
+  /*
+   * Header containing the timestamp and Copy button.
+   */
+  const itemHeader =
+    document.createElement("div");
+
+  Object.assign(itemHeader.style, {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
+    marginBottom: "8px"
+  });
+
+  const time =
+    document.createElement("span");
+
+  time.textContent =
+    formatHistoryTime(entry?.createdAt);
+
+  Object.assign(time.style, {
+    color: "#94a3b8",
+    font: "11px system-ui, sans-serif"
+  });
+
+  const copyHistoryButton =
+    document.createElement("button");
+
+  copyHistoryButton.type = "button";
+  copyHistoryButton.textContent = "Copy";
+
+  Object.assign(
+    copyHistoryButton.style,
+    {
+      padding: "4px 8px",
+      border: "0",
+      borderRadius: "5px",
+      cursor: "pointer",
+      background: "#374151",
+      color: "#ffffff",
+      font:
+        "600 10px system-ui, sans-serif"
+    }
+  );
+
+  copyHistoryButton.addEventListener(
+    "click",
+    async () => {
+      await copyTextWithFeedback(
+        entry?.text || "",
+        copyHistoryButton,
+        "Copy"
+      );
+    }
+  );
+
+  itemHeader.append(
+    time,
+    copyHistoryButton
+  );
+
+  item.appendChild(itemHeader);
+
+  /*
+   * Translation on the left and screenshot on the right.
+   * Both sides stretch to the same row height.
+   */
+  const contentRow =
+    document.createElement("div");
+
+  Object.assign(contentRow.style, {
+    display: "flex",
+    alignItems: "stretch",
+    gap: "10px",
+    width: "100%"
+  });
+
+  const itemText =
+    document.createElement("div");
+
+  itemText.textContent =
+    entry?.text ||
+    "No translation text.";
+
+  Object.assign(itemText.style, {
+    flex: "1 1 62%",
+    minWidth: "0",
+    maxHeight: "220px",
+    overflow: "auto",
+    boxSizing: "border-box",
+    padding: "7px 8px",
+    borderRadius: "6px",
+    background: "#111827",
+    color: "#f3f4f6",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+    font: "15px/1.55 system-ui, sans-serif"
+  });
+
+  contentRow.appendChild(itemText);
+
+  /*
+   * Add the preview only if this history entry has an image.
+   */
+  if (
+    typeof entry?.imageDataUrl ===
+      "string" &&
+    entry.imageDataUrl
   ) {
+    const previewButton =
+      document.createElement("button");
+
+    previewButton.type = "button";
+    previewButton.title =
+      "Click to enlarge screenshot";
+
+    previewButton.setAttribute(
+      "aria-label",
+      "Enlarge screenshot used for this translation"
+    );
+
+    Object.assign(
+      previewButton.style,
+      {
+        position: "relative",
+        flex: "0 0 36%",
+        minWidth: "90px",
+        minHeight: "70px",
+        maxHeight: "220px",
+        alignSelf: "stretch",
+        padding: "0",
+        border:
+          "1px solid rgba(255, 255, 255, 0.12)",
+        borderRadius: "7px",
+        overflow: "hidden",
+        cursor: "zoom-in",
+        background: "#0f172a"
+      }
+    );
+
+    const previewImage =
+      document.createElement("img");
+
+    previewImage.src =
+      entry.imageDataUrl;
+
+    previewImage.alt =
+      "Screenshot used for this translation";
+
+    Object.assign(
+      previewImage.style,
+      {
+        position: "absolute",
+        inset: "0",
+        display: "block",
+        width: "100%",
+        height: "100%",
+        objectFit: "contain",
+        background: "#0f172a"
+      }
+    );
+
+    previewButton.appendChild(
+      previewImage
+    );
+
+    previewButton.addEventListener(
+      "mouseenter",
+      () => {
+        previewButton.style.borderColor =
+          "rgba(96, 165, 250, 0.8)";
+      }
+    );
+
+    previewButton.addEventListener(
+      "mouseleave",
+      () => {
+        previewButton.style.borderColor =
+          "rgba(255, 255, 255, 0.12)";
+      }
+    );
+
+    previewButton.addEventListener(
+      "click",
+      () => {
+        showEnlargedImage(
+          entry.imageDataUrl,
+          entry.text
+        );
+      }
+    );
+
+    contentRow.appendChild(
+      previewButton
+    );
+  }
+
+  item.appendChild(contentRow);
+
+  return item;
+} {
     const item =
       document.createElement("article");
 
