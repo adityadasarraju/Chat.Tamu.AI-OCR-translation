@@ -1015,21 +1015,19 @@
         "Enlarge screenshot"
       );
 
-      Object.assign(
-        previewButton.style,
-        {
-          display: "block",
-          width: "100%",
-          margin: "0 0 9px",
-          padding: "0",
-          border:
-            "1px solid rgba(255, 255, 255, 0.12)",
-          borderRadius: "7px",
-          overflow: "hidden",
-          cursor: "zoom-in",
-          background: "#0f172a"
-        }
-      );
+      Object.assign(previewButton.style, {
+  display: "block",
+  width: "180px",
+  maxWidth: "100%",
+  margin: "0 auto 9px",
+  padding: "0",
+  border:
+    "1px solid rgba(255, 255, 255, 0.12)",
+  borderRadius: "7px",
+  overflow: "hidden",
+  cursor: "zoom-in",
+  background: "#0f172a"
+});
 
       const previewImage =
         document.createElement("img");
@@ -1040,16 +1038,13 @@
       previewImage.alt =
         "Screenshot used for this translation";
 
-      Object.assign(
-        previewImage.style,
-        {
-          display: "block",
-          width: "100%",
-          maxHeight: "170px",
-          objectFit: "contain",
-          background: "#0f172a"
-        }
-      );
+Object.assign(previewImage.style, {
+  display: "block",
+  width: "100%",
+  height: "100px",
+  objectFit: "contain",
+  background: "#0f172a"
+});
 
       previewButton.appendChild(
         previewImage
@@ -1143,15 +1138,15 @@
       entry?.text ||
       "No translation text.";
 
-    Object.assign(itemText.style, {
-      maxHeight: "160px",
-      overflow: "auto",
-      color: "#d1d5db",
-      whiteSpace: "pre-wrap",
-      overflowWrap: "anywhere",
-      font:
-        "12px/1.45 system-ui, sans-serif"
-    });
+Object.assign(itemText.style, {
+  maxHeight: "200px",
+  overflow: "auto",
+  color: "#f3f4f6",
+  whiteSpace: "pre-wrap",
+  overflowWrap: "anywhere",
+  font:
+    "15px/1.55 system-ui, sans-serif"
+});
 
     item.append(
       itemHeader,
@@ -1308,7 +1303,7 @@
           whiteSpace: "pre-wrap",
           overflowWrap: "anywhere",
           font:
-            "13px/1.45 system-ui, sans-serif"
+            "16px/1.55 system-ui, sans-serif"
         }
       );
 
