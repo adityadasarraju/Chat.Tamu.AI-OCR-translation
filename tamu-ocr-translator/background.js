@@ -571,7 +571,8 @@ async function translateImage(
     promptParts.push(
       "After translating, silently proofread the English.",
       "Correct grammar, punctuation, awkward phrasing, and sentence structure.",
-      "Make the English clear and natural without changing the original meaning, names, tone, or level of formality."
+      "Make the English clear and natural without changing the original meaning, names, tone, or level of formality.",
+      "but if the the scene is of dialogue and it is clunky like 'I want to quickly compete with other schools' you can translate the problematic text to something mroe converstaional like 'I can't wait to compete with the other schools'"
     );
   } else {
     promptParts.push(
