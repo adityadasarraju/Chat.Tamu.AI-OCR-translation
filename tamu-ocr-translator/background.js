@@ -128,114 +128,34 @@ chrome.runtime.onMessage.addListener(
         "OCR_REGION_SELECTED" &&
       sender.tab?.id
     ) {
-async function handleSelectedRegion({
-  tabId,
-  windowId,
-  selection
-}) {
-  if (!selection) {
-    throw new Error(
-      "No image area was selected."
+if (
+  message.type ===
+    "OCR_REGION_SELECTED" &&
+  sender.tab?.id
+) {
+  handleSelectedRegion({
+    tabId: sender.tab.id,
+    windowId: sender.tab.windowId,
+    selection: message.selection
+  }).catch(async (error) => {
+    console.error(
+      "OCR translation failed:",
+      error
     );
-  }
 
-  /*
-   * Capture before showing the progress card so the extension interface
-   * is not included in the screenshot.
-   */
-  const screenshotDataUrl =
-    await chrome.tabs.captureVisibleTab(
-      windowId,
+    await sendMessageSafely(
+      sender.tab.id,
       {
-        format: "png"
+        type: "OCR_SHOW_RESULT",
+        error:
+          error?.message ||
+          "OCR and translation failed."
       }
     );
-
-  /*
-   * Retrieve the current history so it remains visible while the new
-   * image is being prepared and translated.
-   */
-  const existingHistory =
-    await getTranslationHistory();
-
-  await sendMessageSafely(tabId, {
-    type: "OCR_SHOW_STATUS",
-    message:
-      "Preparing the selected image...",
-    history: existingHistory
   });
 
-  const cropResponse =
-    await chrome.tabs.sendMessage(
-      tabId,
-      {
-        type: "OCR_CROP_SCREENSHOT",
-        screenshotDataUrl,
-        selection
-      }
-    );
-
-  if (
-    !cropResponse?.ok ||
-    !cropResponse.imageDataUrl
-  ) {
-    throw new Error(
-      cropResponse?.error ||
-        "Could not crop the selected area."
-    );
-  }
-
-  /*
-   * This updates the progress card already shown at the bottom instead
-   * of replacing the entire history panel.
-   */
-  await sendMessageSafely(tabId, {
-    type: "OCR_SHOW_STATUS",
-    message:
-      "Reading and translating with TAMU AI...",
-    history: existingHistory
-  });
-
-  const translatedText =
-    await translateImage(
-      cropResponse.imageDataUrl
-    );
-
-  const previewImage =
-    cropResponse.historyImageDataUrl ||
-    cropResponse.imageDataUrl;
-
-  const updatedHistory =
-    await addTranslationToHistory(
-      translatedText,
-      previewImage
-    );
-
-  /*
-   * showResultPanel() rebuilds the history using updatedHistory. The
-   * temporary progress card disappears and the translated text becomes
-   * the newest history entry.
-   */
-  await sendMessageSafely(tabId, {
-    type: "OCR_SHOW_RESULT",
-    text: translatedText,
-    history: updatedHistory
-  });
+  return false;
 }
-
-        await sendMessageSafely(
-          sender.tab.id,
-          {
-            type: "OCR_SHOW_RESULT",
-            error:
-              error?.message ||
-              "OCR and translation failed."
-          }
-        );
-      });
-
-      return false;
-    }
 if (
   message.type ===
   "RESET_TRANSLATION_HISTORY"
