@@ -1,95 +1,185 @@
-const DEFAULT_MODEL = "protected.gemini-2.5-flash";
+const DEFAULT_MODEL =
+  "protected.gemini-2.5-flash";
 
-const apiKeyInput = document.getElementById("apiKey");
-const modelInput = document.getElementById("model");
-const translateButton = document.getElementById(
-  "translateButton"
-);
-const toggleKeyButton = document.getElementById(
-  "toggleKey"
-);
-const statusElement = document.getElementById("status");
+const apiKeyInput =
+  document.getElementById("apiKey");
 
-initialize();
+const modelInput =
+  document.getElementById("model");
+
+const translateButton =
+  document.getElementById("translateButton");
+
 const historyButton =
   document.getElementById("historyButton");
+
+const toggleKeyButton =
+  document.getElementById("toggleKey");
+
+const aiProofreaderInput =
+  document.getElementById("aiProofreader");
+
+const smoothDialogueInput =
+  document.getElementById("smoothDialogue");
+
+const statusElement =
+  document.getElementById("status");
+
+const costToast =
+  document.getElementById("costToast");
+
+let toastTimer = null;
+
+initialize();
+
 async function initialize() {
   try {
-    const sessionData = await chrome.storage.session.get([
-      "tamuApiKey"
-    ]);
+    const sessionData =
+      await chrome.storage.session.get([
+        "tamuApiKey"
+      ]);
 
-    const localData = await chrome.storage.local.get([
-      "tamuModel"
-    ]);
+    const localData =
+      await chrome.storage.local.get([
+        "tamuModel",
+        "aiProofreader",
+        "smoothDialogue"
+      ]);
 
     if (sessionData.tamuApiKey) {
-      apiKeyInput.value = sessionData.tamuApiKey;
+      apiKeyInput.value =
+        sessionData.tamuApiKey;
     }
 
-    const savedModel = localData.tamuModel;
+    const savedModel =
+      localData.tamuModel;
 
-    /*
-     * Only restore the saved model if it still exists in the dropdown.
-     */
-    const savedModelExists = Array.from(
-      modelInput.options
-    ).some((option) => option.value === savedModel);
+    const savedModelExists =
+      Array.from(modelInput.options).some(
+        (option) => {
+          return option.value === savedModel;
+        }
+      );
 
-    modelInput.value = savedModelExists
-      ? savedModel
-      : DEFAULT_MODEL;
+    modelInput.value =
+      savedModelExists
+        ? savedModel
+        : DEFAULT_MODEL;
+
+    aiProofreaderInput.checked =
+      localData.aiProofreader === true;
+
+    smoothDialogueInput.checked =
+      localData.smoothDialogue === true;
   } catch (error) {
     setStatus(
-      error.message || "Could not load extension settings.",
+      error?.message ||
+        "Could not load extension settings.",
       true
     );
   }
 }
 
-toggleKeyButton.addEventListener("click", () => {
-  const keyIsHidden = apiKeyInput.type === "password";
+toggleKeyButton.addEventListener(
+  "click",
+  () => {
+    const keyIsHidden =
+      apiKeyInput.type === "password";
 
-  apiKeyInput.type = keyIsHidden ? "text" : "password";
-  toggleKeyButton.textContent = keyIsHidden
-    ? "Hide"
-    : "Show";
-});
+    apiKeyInput.type =
+      keyIsHidden
+        ? "text"
+        : "password";
 
-translateButton.addEventListener("click", async () => {
-  const apiKey = apiKeyInput.value.trim();
-  const model = modelInput.value || DEFAULT_MODEL;
-
-  setStatus("");
-
-  if (!apiKey) {
-    setStatus("Enter your TAMU AI API key.", true);
-    return;
+    toggleKeyButton.textContent =
+      keyIsHidden
+        ? "Hide"
+        : "Show";
   }
+);
 
-  if (!model) {
-    setStatus("Select an image-input model.", true);
-    return;
+aiProofreaderInput.addEventListener(
+  "change",
+  async () => {
+    await saveEnhancementSettings();
+
+    if (aiProofreaderInput.checked) {
+      showCostWarning(
+        "AI proofreader may use additional output tokens, so the translation may cost slightly more."
+      );
+    }
   }
+);
 
-  translateButton.disabled = true;
-  toggleKeyButton.disabled = true;
-  modelInput.disabled = true;
-historyButton.addEventListener(
+smoothDialogueInput.addEventListener(
+  "change",
+  async () => {
+    await saveEnhancementSettings();
+
+    if (smoothDialogueInput.checked) {
+      showCostWarning(
+        "Smooth Dialogue sends recent translations as context. This uses more input tokens and may make each translation more expensive."
+      );
+    }
+  }
+);
+
+translateButton.addEventListener(
   "click",
   async () => {
-    setStatus("Opening translation history...");
+    const apiKey =
+      apiKeyInput.value.trim();
+
+    const model =
+      modelInput.value ||
+      DEFAULT_MODEL;
+
+    setStatus("");
+
+    if (!apiKey) {
+      setStatus(
+        "Enter your TAMU AI API key.",
+        true
+      );
+
+      return;
+    }
+
+    if (!model) {
+      setStatus(
+        "Select an image-input model.",
+        true
+      );
+
+      return;
+    }
+
+    setControlsDisabled(true);
+    setStatus("Starting selection tool...");
 
     try {
+      await chrome.storage.session.set({
+        tamuApiKey: apiKey
+      });
+
+      await chrome.storage.local.set({
+        tamuModel: model,
+        aiProofreader:
+          aiProofreaderInput.checked,
+        smoothDialogue:
+          smoothDialogueInput.checked
+      });
+
       const response =
         await chrome.runtime.sendMessage({
-          type: "SHOW_TRANSLATION_HISTORY"
+          type:
+            "START_TRANSLATION_SELECTION"
         });
 
       if (!response?.ok) {
         throw new Error(
           response?.error ||
-          "Could not show translation history."
+            "Could not start the selection tool."
         );
       }
 
@@ -97,55 +187,114 @@ historyButton.addEventListener(
     } catch (error) {
       setStatus(
         error?.message ||
-        "Could not show translation history.",
+          "Something went wrong.",
         true
       );
+
+      setControlsDisabled(false);
     }
   }
 );
-  setStatus("Starting selection tool...");
 
-  try {
-    /*
-     * The API key is stored in Chrome session storage rather than being
-     * written into a project file.
-     */
-    await chrome.storage.session.set({
-      tamuApiKey: apiKey
-    });
-
-    /*
-     * The model name is not a secret and may persist across sessions.
-     */
-    await chrome.storage.local.set({
-      tamuModel: model
-    });
-
-    const response = await chrome.runtime.sendMessage({
-      type: "START_TRANSLATION_SELECTION"
-    });
-
-    if (!response?.ok) {
-      throw new Error(
-        response?.error ||
-        "Could not start the selection tool."
-      );
-    }
-
-    window.close();
-  } catch (error) {
+historyButton.addEventListener(
+  "click",
+  async () => {
+    setControlsDisabled(true);
     setStatus(
-      error.message || "Something went wrong.",
-      true
+      "Opening translation history..."
     );
 
-    translateButton.disabled = false;
-    toggleKeyButton.disabled = false;
-    modelInput.disabled = false;
-  }
-});
+    try {
+      const response =
+        await chrome.runtime.sendMessage({
+          type:
+            "SHOW_TRANSLATION_HISTORY"
+        });
 
-function setStatus(message, isError = false) {
+      if (!response?.ok) {
+        throw new Error(
+          response?.error ||
+            "Could not show translation history."
+        );
+      }
+
+      window.close();
+    } catch (error) {
+      setStatus(
+        error?.message ||
+          "Could not show translation history.",
+        true
+      );
+
+      setControlsDisabled(false);
+    }
+  }
+);
+
+async function saveEnhancementSettings() {
+  try {
+    await chrome.storage.local.set({
+      aiProofreader:
+        aiProofreaderInput.checked,
+      smoothDialogue:
+        smoothDialogueInput.checked
+    });
+  } catch (error) {
+    console.error(
+      "Could not save translation options:",
+      error
+    );
+
+    setStatus(
+      "Could not save translation options.",
+      true
+    );
+  }
+}
+
+function showCostWarning(message) {
+  if (toastTimer) {
+    clearTimeout(toastTimer);
+    toastTimer = null;
+  }
+
+  costToast.textContent = message;
+
+  /*
+   * Removing and re-adding the class restarts the five-second animation
+   * if the user selects another option while the first warning is visible.
+   */
+  costToast.classList.remove("show");
+
+  void costToast.offsetWidth;
+
+  costToast.classList.add("show");
+
+  toastTimer = setTimeout(() => {
+    costToast.classList.remove("show");
+    costToast.textContent = "";
+    toastTimer = null;
+  }, 5000);
+}
+
+function setControlsDisabled(disabled) {
+  apiKeyInput.disabled = disabled;
+  modelInput.disabled = disabled;
+  translateButton.disabled = disabled;
+  historyButton.disabled = disabled;
+  toggleKeyButton.disabled = disabled;
+  aiProofreaderInput.disabled = disabled;
+  smoothDialogueInput.disabled = disabled;
+}
+
+function setStatus(
+  message,
+  isError = false
+) {
   statusElement.textContent = message;
-  statusElement.classList.toggle("error", isError);
+
+  statusElement.classList.toggle(
+    "error",
+    isError
+  );
 }
