@@ -6,17 +6,25 @@
   window.__tamuOcrTranslatorLoaded = true;
 
   const IDS = {
-    selectionOverlay: "__tamu_ocr_selection_overlay",
-    selectionBox: "__tamu_ocr_selection_box",
-    resultPanel: "__tamu_ocr_result_panel",
-    imageModal: "__tamu_ocr_image_modal"
+    selectionOverlay:
+      "__tamu_ocr_selection_overlay",
+    selectionBox:
+      "__tamu_ocr_selection_box",
+    resultPanel:
+      "__tamu_ocr_result_panel",
+    imageModal:
+      "__tamu_ocr_image_modal"
   };
 
   chrome.runtime.onMessage.addListener(
     (message, sender, sendResponse) => {
       if (message.type === "OCR_START_SELECTION") {
         startSelection();
-        sendResponse({ ok: true });
+
+        sendResponse({
+          ok: true
+        });
+
         return;
       }
 
@@ -30,7 +38,9 @@
 
             try {
               historyImageDataUrl =
-                await createHistoryPreview(imageDataUrl);
+                await createHistoryPreview(
+                  imageDataUrl
+                );
             } catch (error) {
               console.warn(
                 "Could not create history preview:",
@@ -48,7 +58,7 @@
             sendResponse({
               ok: false,
               error:
-                error.message ||
+                error?.message ||
                 "Could not crop the screenshot."
             });
           });
@@ -58,10 +68,15 @@
 
       if (message.type === "OCR_SHOW_STATUS") {
         showResultPanel({
-          status: message.message || "Working..."
+          status:
+            message.message ||
+            "Working..."
         });
 
-        sendResponse({ ok: true });
+        sendResponse({
+          ok: true
+        });
+
         return;
       }
 
@@ -72,25 +87,52 @@
           history: message.history
         });
 
-        sendResponse({ ok: true });
+        sendResponse({
+          ok: true
+        });
+
+        return;
+      }
+
+      if (message.type === "OCR_SHOW_HISTORY") {
+        showResultPanel({
+          history:
+            Array.isArray(message.history)
+              ? message.history
+              : []
+        });
+
+        sendResponse({
+          ok: true
+        });
       }
     }
   );
 
   function startSelection() {
-    removeElement(IDS.selectionOverlay);
-    removeElement(IDS.resultPanel);
+    removeElement(
+      IDS.selectionOverlay
+    );
+
+    removeElement(
+      IDS.resultPanel
+    );
+
     removeImageModal();
 
-    const overlay = document.createElement("div");
-    overlay.id = IDS.selectionOverlay;
+    const overlay =
+      document.createElement("div");
+
+    overlay.id =
+      IDS.selectionOverlay;
 
     Object.assign(overlay.style, {
       position: "fixed",
       inset: "0",
       zIndex: "2147483647",
       cursor: "crosshair",
-      background: "rgba(0, 0, 0, 0.12)",
+      background:
+        "rgba(0, 0, 0, 0.12)",
       userSelect: "none",
       touchAction: "none"
     });
@@ -101,35 +143,48 @@
     instructions.textContent =
       "Drag around foreign text • Press Esc to cancel";
 
-    Object.assign(instructions.style, {
-      position: "fixed",
-      top: "16px",
-      left: "50%",
-      transform: "translateX(-50%)",
-      maxWidth: "calc(100vw - 32px)",
-      padding: "10px 14px",
-      borderRadius: "8px",
-      background: "#111827",
-      color: "#ffffff",
-      boxShadow: "0 8px 30px rgba(0, 0, 0, 0.3)",
-      font: "600 13px system-ui, sans-serif",
-      textAlign: "center",
-      pointerEvents: "none"
-    });
+    Object.assign(
+      instructions.style,
+      {
+        position: "fixed",
+        top: "16px",
+        left: "50%",
+        transform:
+          "translateX(-50%)",
+        maxWidth:
+          "calc(100vw - 32px)",
+        padding: "10px 14px",
+        borderRadius: "8px",
+        background: "#111827",
+        color: "#ffffff",
+        boxShadow:
+          "0 8px 30px rgba(0, 0, 0, 0.3)",
+        font:
+          "600 13px system-ui, sans-serif",
+        textAlign: "center",
+        pointerEvents: "none"
+      }
+    );
 
     const selectionBox =
       document.createElement("div");
 
-    selectionBox.id = IDS.selectionBox;
+    selectionBox.id =
+      IDS.selectionBox;
 
-    Object.assign(selectionBox.style, {
-      display: "none",
-      position: "fixed",
-      border: "2px solid #3b82f6",
-      background: "rgba(59, 130, 246, 0.16)",
-      boxSizing: "border-box",
-      pointerEvents: "none"
-    });
+    Object.assign(
+      selectionBox.style,
+      {
+        display: "none",
+        position: "fixed",
+        border:
+          "2px solid #3b82f6",
+        background:
+          "rgba(59, 130, 246, 0.16)",
+        boxSizing: "border-box",
+        pointerEvents: "none"
+      }
+    );
 
     overlay.append(
       instructions,
@@ -161,7 +216,8 @@
       startX = event.clientX;
       startY = event.clientY;
 
-      selectionBox.style.display = "block";
+      selectionBox.style.display =
+        "block";
 
       updateSelectionBox(
         selectionBox,
@@ -172,7 +228,9 @@
       );
 
       try {
-        overlay.setPointerCapture(event.pointerId);
+        overlay.setPointerCapture(
+          event.pointerId
+        );
       } catch {
         // Pointer capture is optional.
       }
@@ -204,30 +262,48 @@
 
       const left = Math.max(
         0,
-        Math.min(startX, event.clientX)
+        Math.min(
+          startX,
+          event.clientX
+        )
       );
 
       const top = Math.max(
         0,
-        Math.min(startY, event.clientY)
+        Math.min(
+          startY,
+          event.clientY
+        )
       );
 
       const right = Math.min(
         window.innerWidth,
-        Math.max(startX, event.clientX)
+        Math.max(
+          startX,
+          event.clientX
+        )
       );
 
       const bottom = Math.min(
         window.innerHeight,
-        Math.max(startY, event.clientY)
+        Math.max(
+          startY,
+          event.clientY
+        )
       );
 
-      const width = right - left;
-      const height = bottom - top;
+      const width =
+        right - left;
+
+      const height =
+        bottom - top;
 
       cleanup();
 
-      if (width < 8 || height < 8) {
+      if (
+        width < 8 ||
+        height < 8
+      ) {
         showResultPanel({
           error:
             "The selected area was too small. Please try again."
@@ -237,23 +313,24 @@
       }
 
       chrome.runtime.sendMessage({
-        type: "OCR_REGION_SELECTED",
+        type:
+          "OCR_REGION_SELECTED",
         selection: {
           left,
           top,
           width,
           height,
-          viewportWidth: window.innerWidth,
-          viewportHeight: window.innerHeight
+          viewportWidth:
+            window.innerWidth,
+          viewportHeight:
+            window.innerHeight
         }
       });
     };
 
     const onPointerCancel = () => {
-      if (dragging) {
-        dragging = false;
-        cleanup();
-      }
+      dragging = false;
+      cleanup();
     };
 
     function cleanup() {
@@ -320,15 +397,29 @@
     x2,
     y2
   ) {
-    const left = Math.min(x1, x2);
-    const top = Math.min(y1, y2);
-    const width = Math.abs(x2 - x1);
-    const height = Math.abs(y2 - y1);
+    const left =
+      Math.min(x1, x2);
 
-    element.style.left = `${left}px`;
-    element.style.top = `${top}px`;
-    element.style.width = `${width}px`;
-    element.style.height = `${height}px`;
+    const top =
+      Math.min(y1, y2);
+
+    const width =
+      Math.abs(x2 - x1);
+
+    const height =
+      Math.abs(y2 - y1);
+
+    element.style.left =
+      `${left}px`;
+
+    element.style.top =
+      `${top}px`;
+
+    element.style.width =
+      `${width}px`;
+
+    element.style.height =
+      `${height}px`;
   }
 
   async function cropScreenshot(
@@ -351,13 +442,11 @@
       );
     }
 
-    const image = await loadImage(
-      screenshotDataUrl
-    );
+    const image =
+      await loadImage(
+        screenshotDataUrl
+      );
 
-    /*
-     * Screenshot pixels may differ from CSS pixels on Retina displays.
-     */
     const scaleX =
       image.naturalWidth /
       selection.viewportWidth;
@@ -366,43 +455,69 @@
       image.naturalHeight /
       selection.viewportHeight;
 
-    const sourceX = Math.max(
-      0,
-      Math.round(selection.left * scaleX)
-    );
-
-    const sourceY = Math.max(
-      0,
-      Math.round(selection.top * scaleY)
-    );
-
-    const sourceWidth = Math.min(
-      image.naturalWidth - sourceX,
+    const sourceX =
       Math.max(
-        1,
-        Math.round(selection.width * scaleX)
-      )
-    );
+        0,
+        Math.round(
+          selection.left *
+          scaleX
+        )
+      );
 
-    const sourceHeight = Math.min(
-      image.naturalHeight - sourceY,
+    const sourceY =
       Math.max(
-        1,
-        Math.round(selection.height * scaleY)
-      )
-    );
+        0,
+        Math.round(
+          selection.top *
+          scaleY
+        )
+      );
 
-    if (sourceWidth <= 0 || sourceHeight <= 0) {
+    const sourceWidth =
+      Math.min(
+        image.naturalWidth -
+          sourceX,
+        Math.max(
+          1,
+          Math.round(
+            selection.width *
+            scaleX
+          )
+        )
+      );
+
+    const sourceHeight =
+      Math.min(
+        image.naturalHeight -
+          sourceY,
+        Math.max(
+          1,
+          Math.round(
+            selection.height *
+            scaleY
+          )
+        )
+      );
+
+    if (
+      sourceWidth <= 0 ||
+      sourceHeight <= 0
+    ) {
       throw new Error(
         "The selected image area was invalid."
       );
     }
 
     const canvas =
-      document.createElement("canvas");
+      document.createElement(
+        "canvas"
+      );
 
-    canvas.width = sourceWidth;
-    canvas.height = sourceHeight;
+    canvas.width =
+      sourceWidth;
+
+    canvas.height =
+      sourceHeight;
 
     const context =
       canvas.getContext("2d");
@@ -413,8 +528,11 @@
       );
     }
 
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "high";
+    context.imageSmoothingEnabled =
+      true;
+
+    context.imageSmoothingQuality =
+      "high";
 
     context.drawImage(
       image,
@@ -428,40 +546,50 @@
       sourceHeight
     );
 
-    return canvas.toDataURL("image/png");
+    return canvas.toDataURL(
+      "image/png"
+    );
   }
 
   async function createHistoryPreview(
     imageDataUrl
   ) {
-    const image = await loadImage(
-      imageDataUrl
-    );
+    const image =
+      await loadImage(
+        imageDataUrl
+      );
 
-    /*
-     * Reduce image size so five history images fit in session storage.
-     */
     const maximumWidth = 900;
     const maximumHeight = 900;
 
     const scale = Math.min(
       1,
-      maximumWidth / image.naturalWidth,
-      maximumHeight / image.naturalHeight
+      maximumWidth /
+        image.naturalWidth,
+      maximumHeight /
+        image.naturalHeight
     );
 
     const width = Math.max(
       1,
-      Math.round(image.naturalWidth * scale)
+      Math.round(
+        image.naturalWidth *
+        scale
+      )
     );
 
     const height = Math.max(
       1,
-      Math.round(image.naturalHeight * scale)
+      Math.round(
+        image.naturalHeight *
+        scale
+      )
     );
 
     const canvas =
-      document.createElement("canvas");
+      document.createElement(
+        "canvas"
+      );
 
     canvas.width = width;
     canvas.height = height;
@@ -473,8 +601,11 @@
       return "";
     }
 
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "high";
+    context.imageSmoothingEnabled =
+      true;
+
+    context.imageSmoothingQuality =
+      "high";
 
     context.drawImage(
       image,
@@ -491,23 +622,26 @@
   }
 
   function loadImage(source) {
-    return new Promise((resolve, reject) => {
-      const image = new Image();
+    return new Promise(
+      (resolve, reject) => {
+        const image =
+          new Image();
 
-      image.onload = () => {
-        resolve(image);
-      };
+        image.onload = () => {
+          resolve(image);
+        };
 
-      image.onerror = () => {
-        reject(
-          new Error(
-            "Could not load the captured screenshot."
-          )
-        );
-      };
+        image.onerror = () => {
+          reject(
+            new Error(
+              "Could not load the captured screenshot."
+            )
+          );
+        };
 
-      image.src = source;
-    });
+        image.src = source;
+      }
+    );
   }
 
   function showResultPanel({
@@ -516,47 +650,80 @@
     error,
     history = []
   }) {
-    removeElement(IDS.resultPanel);
+    removeElement(
+      IDS.resultPanel
+    );
+
     removeImageModal();
 
     const panel =
-      document.createElement("section");
+      document.createElement(
+        "section"
+      );
 
-    panel.id = IDS.resultPanel;
+    panel.id =
+      IDS.resultPanel;
 
     Object.assign(panel.style, {
       position: "fixed",
       top: "18px",
       right: "18px",
+      width:
+        "min(520px, calc(100vw - 36px))",
+      height:
+        "min(680px, calc(100vh - 36px))",
+      minWidth: "320px",
+      minHeight: "220px",
+      maxWidth:
+        "calc(100vw - 12px)",
+      maxHeight:
+        "calc(100vh - 12px)",
       zIndex: "2147483646",
-      width: "min(480px, calc(100vw - 36px))",
-      maxHeight: "calc(100vh - 36px)",
-      overflow: "auto",
+      display: "flex",
+      flexDirection: "column",
+      overflow: "hidden",
+      resize: "both",
       boxSizing: "border-box",
-      padding: "16px",
       border:
-        "1px solid rgba(255, 255, 255, 0.14)",
+        "1px solid rgba(255, 255, 255, 0.16)",
       borderRadius: "12px",
       background: "#111827",
       color: "#f9fafb",
       boxShadow:
         "0 18px 60px rgba(0, 0, 0, 0.45)",
-      font: "14px/1.55 system-ui, sans-serif"
+      fontFamily:
+        "system-ui, sans-serif",
+      fontSize: "14px"
     });
 
     const header =
-      document.createElement("div");
+      document.createElement(
+        "header"
+      );
 
     Object.assign(header.style, {
+      position: "relative",
+      zIndex: "20",
+      flex: "0 0 auto",
       display: "flex",
       alignItems: "center",
-      justifyContent: "space-between",
+      justifyContent:
+        "space-between",
       gap: "12px",
-      marginBottom: "12px"
+      minHeight: "54px",
+      boxSizing: "border-box",
+      padding: "12px 14px",
+      borderBottom:
+        "1px solid rgba(255, 255, 255, 0.12)",
+      background: "#111827",
+      cursor: "move",
+      userSelect: "none"
     });
 
     const title =
-      document.createElement("strong");
+      document.createElement(
+        "strong"
+      );
 
     if (error) {
       title.textContent =
@@ -570,53 +737,59 @@
     }
 
     Object.assign(title.style, {
+      paddingRight: "42px",
       color: "#f9fafb",
-      font: "700 16px system-ui, sans-serif"
+      fontSize: "1.15em",
+      lineHeight: "1.25"
     });
 
     const closeButton =
-      document.createElement("button");
+      document.createElement(
+        "button"
+      );
 
-    closeButton.type = "button";
-    closeButton.textContent = "×";
+    closeButton.type =
+      "button";
+
+    closeButton.textContent =
+      "×";
 
     closeButton.setAttribute(
       "aria-label",
-      "Close translator"
+      "Close translation history"
     );
 
-    Object.assign(closeButton.style, {
-      width: "30px",
-      height: "30px",
-      flex: "0 0 auto",
-      padding: "0",
-      border: "0",
-      borderRadius: "6px",
-      cursor: "pointer",
-      background: "#374151",
-      color: "#ffffff",
-      font: "22px/30px system-ui, sans-serif"
-    });
-
-    closeButton.addEventListener(
-      "mouseenter",
-      () => {
-        closeButton.style.background =
-          "#4b5563";
+    Object.assign(
+      closeButton.style,
+      {
+        position: "absolute",
+        top: "10px",
+        right: "10px",
+        zIndex: "30",
+        width: "34px",
+        height: "34px",
+        padding: "0",
+        border: "0",
+        borderRadius: "7px",
+        cursor: "pointer",
+        background: "#374151",
+        color: "#ffffff",
+        font:
+          "24px/34px system-ui, sans-serif"
       }
     );
 
     closeButton.addEventListener(
-      "mouseleave",
-      () => {
-        closeButton.style.background =
-          "#374151";
+      "pointerdown",
+      (event) => {
+        event.stopPropagation();
       }
     );
 
     closeButton.addEventListener(
       "click",
-      () => {
+      (event) => {
+        event.stopPropagation();
         removeImageModal();
         panel.remove();
       }
@@ -627,49 +800,78 @@
       closeButton
     );
 
-    panel.appendChild(header);
+    const scrollingBody =
+      document.createElement(
+        "div"
+      );
+
+    Object.assign(
+      scrollingBody.style,
+      {
+        position: "relative",
+        flex: "1 1 auto",
+        minHeight: "0",
+        overflowX: "hidden",
+        overflowY: "auto",
+        boxSizing: "border-box",
+        padding: "14px"
+      }
+    );
+
+    panel.append(
+      header,
+      scrollingBody
+    );
+
+    makePanelDraggable(
+      panel,
+      header,
+      closeButton
+    );
+
+    makePanelContentResponsive(
+      panel
+    );
 
     if (error || status) {
       const message =
-        document.createElement("div");
+        document.createElement(
+          "div"
+        );
 
       message.textContent =
         error || status;
 
-      Object.assign(message.style, {
-        padding: "4px 0",
-        color: error
-          ? "#fca5a5"
-          : "#93c5fd",
-        whiteSpace: "pre-wrap",
-        overflowWrap: "anywhere"
-      });
+      Object.assign(
+        message.style,
+        {
+          padding: "4px 0",
+          color: error
+            ? "#fca5a5"
+            : "#93c5fd",
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+          fontSize: "1em",
+          lineHeight: "1.5"
+        }
+      );
 
-      panel.appendChild(message);
+      scrollingBody.appendChild(
+        message
+      );
 
       if (error) {
         const tryAgainButton =
-          document.createElement("button");
+          createButton(
+            "Try again",
+            "#2563eb"
+          );
 
-        tryAgainButton.type = "button";
-        tryAgainButton.textContent =
-          "Try again";
+        tryAgainButton.style.width =
+          "100%";
 
-        Object.assign(
-          tryAgainButton.style,
-          {
-            width: "100%",
-            marginTop: "14px",
-            padding: "9px 12px",
-            border: "0",
-            borderRadius: "7px",
-            cursor: "pointer",
-            background: "#2563eb",
-            color: "#ffffff",
-            font:
-              "600 12px system-ui, sans-serif"
-          }
-        );
+        tryAgainButton.style.marginTop =
+          "14px";
 
         tryAgainButton.addEventListener(
           "click",
@@ -679,62 +881,79 @@
           }
         );
 
-        panel.appendChild(
+        scrollingBody.appendChild(
           tryAgainButton
         );
       }
     } else {
       const orderedHistory =
-        getOrderedHistory(history, text);
+        getOrderedHistory(
+          history,
+          text
+        );
 
-      if (orderedHistory.length === 0) {
+      if (
+        orderedHistory.length === 0
+      ) {
         const emptyMessage =
-          document.createElement("div");
+          document.createElement(
+            "div"
+          );
 
         emptyMessage.textContent =
-          "No translation was returned.";
+          "No translation history yet.";
 
         Object.assign(
           emptyMessage.style,
           {
+            padding: "16px 4px",
             color: "#94a3b8",
-            font:
-              "12px/1.45 system-ui, sans-serif"
+            textAlign: "center",
+            fontSize: "1em",
+            lineHeight: "1.5"
           }
         );
 
-        panel.appendChild(
+        scrollingBody.appendChild(
           emptyMessage
         );
       } else {
         const historyContainer =
-          document.createElement("div");
+          document.createElement(
+            "div"
+          );
 
         Object.assign(
           historyContainer.style,
           {
             display: "flex",
             flexDirection: "column",
-            gap: "12px"
+            gap: "1em"
           }
         );
 
         orderedHistory.forEach(
           (entry, index) => {
             const wrapper =
-              document.createElement("div");
+              document.createElement(
+                "div"
+              );
 
             const isNewest =
               index ===
               orderedHistory.length - 1;
 
             const label =
-              document.createElement("div");
+              document.createElement(
+                "div"
+              );
 
             if (isNewest) {
               label.textContent =
                 "Newest translation";
-            } else if (index === 0) {
+            } else if (
+              index === 0
+            ) {
               label.textContent =
                 "Oldest translation";
             } else {
@@ -745,29 +964,32 @@
             Object.assign(
               label.style,
               {
-                margin: "0 0 5px",
+                margin:
+                  "0 0 0.4em",
                 color: isNewest
                   ? "#93c5fd"
                   : "#94a3b8",
-                font:
-                  "700 10px system-ui, sans-serif",
-                textTransform: "uppercase",
-                letterSpacing: "0.04em"
+                fontSize: "0.72em",
+                fontWeight: "700",
+                lineHeight: "1.2",
+                textTransform:
+                  "uppercase",
+                letterSpacing:
+                  "0.04em"
               }
             );
 
             const historyItem =
               createHistoryItem(
-                entry,
-                index
+                entry
               );
 
             if (isNewest) {
               Object.assign(
                 historyItem.style,
                 {
-                  border:
-                    "1px solid rgba(96, 165, 250, 0.7)",
+                  borderColor:
+                    "rgba(96, 165, 250, 0.75)",
                   boxShadow:
                     "0 0 0 1px rgba(96, 165, 250, 0.12)"
                 }
@@ -785,62 +1007,48 @@
           }
         );
 
-        panel.appendChild(
+        scrollingBody.appendChild(
           historyContainer
         );
       }
 
       const actions =
-        document.createElement("div");
-
-      Object.assign(actions.style, {
-        position: "sticky",
-        bottom: "0",
-        display: "flex",
-        gap: "8px",
-        marginTop: "14px",
-        paddingTop: "12px",
-        background: "#111827"
-      });
-
-      const newTranslationButton =
-        document.createElement("button");
-
-      newTranslationButton.type = "button";
-      newTranslationButton.textContent =
-        "New translation";
+        document.createElement(
+          "div"
+        );
 
       Object.assign(
-        newTranslationButton.style,
+        actions.style,
         {
-          flex: "1",
-          minWidth: "0",
-          padding: "9px 12px",
-          border: "0",
-          borderRadius: "7px",
-          cursor: "pointer",
-          background: "#374151",
-          color: "#ffffff",
-          font:
-            "600 12px system-ui, sans-serif"
+          position: "sticky",
+          bottom: "-14px",
+          zIndex: "10",
+          display: "flex",
+          gap: "0.6em",
+          marginTop: "1em",
+          padding:
+            "0.9em 0 0.2em",
+          background: "#111827"
         }
       );
 
-      newTranslationButton.addEventListener(
-        "mouseenter",
-        () => {
-          newTranslationButton.style.background =
-            "#4b5563";
-        }
-      );
+      const newTranslationButton =
+        createButton(
+          "New translation",
+          "#374151"
+        );
 
-      newTranslationButton.addEventListener(
-        "mouseleave",
-        () => {
-          newTranslationButton.style.background =
-            "#374151";
-        }
-      );
+      const copyButton =
+        createButton(
+          "Copy translation",
+          "#2563eb"
+        );
+
+      newTranslationButton.style.flex =
+        "1";
+
+      copyButton.style.flex =
+        "1";
 
       newTranslationButton.addEventListener(
         "click",
@@ -851,57 +1059,24 @@
         }
       );
 
-      const copyButton =
-        document.createElement("button");
-
-      copyButton.type = "button";
-      copyButton.textContent =
-        "Copy translation";
-
-      Object.assign(copyButton.style, {
-        flex: "1",
-        minWidth: "0",
-        padding: "9px 12px",
-        border: "0",
-        borderRadius: "7px",
-        cursor: "pointer",
-        background: "#2563eb",
-        color: "#ffffff",
-        font:
-          "600 12px system-ui, sans-serif"
-      });
-
-      copyButton.addEventListener(
-        "mouseenter",
-        () => {
-          copyButton.style.background =
-            "#1d4ed8";
-        }
-      );
-
-      copyButton.addEventListener(
-        "mouseleave",
-        () => {
-          copyButton.style.background =
-            "#2563eb";
-        }
-      );
-
       copyButton.addEventListener(
         "click",
         async () => {
+          const orderedHistory =
+            getOrderedHistory(
+              history,
+              text
+            );
+
           const newestEntry =
             orderedHistory[
               orderedHistory.length - 1
             ];
 
-          const newestTranslation =
-            newestEntry?.text ||
-            text ||
-            "";
-
           await copyTextWithFeedback(
-            newestTranslation,
+            newestEntry?.text ||
+              text ||
+              "",
             copyButton,
             "Copy translation"
           );
@@ -913,368 +1088,43 @@
         copyButton
       );
 
-      panel.appendChild(actions);
+      scrollingBody.appendChild(
+        actions
+      );
     }
 
     document.documentElement.appendChild(
       panel
     );
 
+    keepPanelOnScreen(panel);
+
     if (!error && !status) {
       requestAnimationFrame(() => {
-        panel.scrollTop =
-          panel.scrollHeight;
+        scrollingBody.scrollTop =
+          scrollingBody.scrollHeight;
       });
     }
   }
 
-  function getOrderedHistory(
-    history,
-    currentText
-  ) {
-    const orderedHistory =
-      Array.isArray(history)
-        ? history
-            .filter((entry) => {
-              return (
-                entry &&
-                typeof entry.text === "string"
-              );
-            })
-            .map((entry) => ({
-              ...entry
-            }))
-        : [];
-
-    orderedHistory.sort(
-      (first, second) => {
-        return (
-          getEntryTimestamp(first) -
-          getEntryTimestamp(second)
-        );
-      }
-    );
-
-    if (
-      orderedHistory.length === 0 &&
-      typeof currentText === "string" &&
-      currentText.trim()
-    ) {
-      orderedHistory.push({
-        id: `temporary-${Date.now()}`,
-        text: currentText.trim(),
-        imageDataUrl: "",
-        createdAt:
-          new Date().toISOString()
-      });
-    }
-
-    return orderedHistory.slice(-5);
-  }
-
-  function getEntryTimestamp(entry) {
-    const timestamp =
-      new Date(
-        entry?.createdAt || 0
-      ).getTime();
-
-    return Number.isFinite(timestamp)
-      ? timestamp
-      : 0;
-  }
-
-function createHistoryItem(entry, index) {
-  const item = document.createElement("article");
-
-  Object.assign(item.style, {
-    padding: "10px",
-    border:
-      "1px solid rgba(255, 255, 255, 0.1)",
-    borderRadius: "8px",
-    background: "#1f2937"
-  });
-
-  /*
-   * Header containing the timestamp and Copy button.
-   */
-  const itemHeader =
-    document.createElement("div");
-
-  Object.assign(itemHeader.style, {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "8px",
-    marginBottom: "8px"
-  });
-
-  const time =
-    document.createElement("span");
-
-  time.textContent =
-    formatHistoryTime(entry?.createdAt);
-
-  Object.assign(time.style, {
-    color: "#94a3b8",
-    font: "11px system-ui, sans-serif"
-  });
-
-  const copyHistoryButton =
-    document.createElement("button");
-
-  copyHistoryButton.type = "button";
-  copyHistoryButton.textContent = "Copy";
-
-  Object.assign(
-    copyHistoryButton.style,
-    {
-      padding: "4px 8px",
-      border: "0",
-      borderRadius: "5px",
-      cursor: "pointer",
-      background: "#374151",
-      color: "#ffffff",
-      font:
-        "600 10px system-ui, sans-serif"
-    }
-  );
-
-  copyHistoryButton.addEventListener(
-    "click",
-    async () => {
-      await copyTextWithFeedback(
-        entry?.text || "",
-        copyHistoryButton,
-        "Copy"
-      );
-    }
-  );
-
-  itemHeader.append(
-    time,
-    copyHistoryButton
-  );
-
-  item.appendChild(itemHeader);
-
-  /*
-   * Translation on the left and screenshot on the right.
-   * Both sides stretch to the same row height.
-   */
-  const contentRow =
-    document.createElement("div");
-
-  Object.assign(contentRow.style, {
-    display: "flex",
-    alignItems: "stretch",
-    gap: "10px",
-    width: "100%"
-  });
-
-  const itemText =
-    document.createElement("div");
-
-  itemText.textContent =
-    entry?.text ||
-    "No translation text.";
-
-  Object.assign(itemText.style, {
-    flex: "1 1 62%",
-    minWidth: "0",
-    maxHeight: "220px",
-    overflow: "auto",
-    boxSizing: "border-box",
-    padding: "7px 8px",
-    borderRadius: "6px",
-    background: "#111827",
-    color: "#f3f4f6",
-    whiteSpace: "pre-wrap",
-    overflowWrap: "anywhere",
-    font: "15px/1.55 system-ui, sans-serif"
-  });
-
-  contentRow.appendChild(itemText);
-
-  /*
-   * Add the preview only if this history entry has an image.
-   */
-  if (
-    typeof entry?.imageDataUrl ===
-      "string" &&
-    entry.imageDataUrl
-  ) {
-    const previewButton =
-      document.createElement("button");
-
-    previewButton.type = "button";
-    previewButton.title =
-      "Click to enlarge screenshot";
-
-    previewButton.setAttribute(
-      "aria-label",
-      "Enlarge screenshot used for this translation"
-    );
-
-    Object.assign(
-      previewButton.style,
-      {
-        position: "relative",
-        flex: "0 0 36%",
-        minWidth: "90px",
-        minHeight: "70px",
-        maxHeight: "220px",
-        alignSelf: "stretch",
-        padding: "0",
-        border:
-          "1px solid rgba(255, 255, 255, 0.12)",
-        borderRadius: "7px",
-        overflow: "hidden",
-        cursor: "zoom-in",
-        background: "#0f172a"
-      }
-    );
-
-    const previewImage =
-      document.createElement("img");
-
-    previewImage.src =
-      entry.imageDataUrl;
-
-    previewImage.alt =
-      "Screenshot used for this translation";
-
-    Object.assign(
-      previewImage.style,
-      {
-        position: "absolute",
-        inset: "0",
-        display: "block",
-        width: "100%",
-        height: "100%",
-        objectFit: "contain",
-        background: "#0f172a"
-      }
-    );
-
-    previewButton.appendChild(
-      previewImage
-    );
-
-    previewButton.addEventListener(
-      "mouseenter",
-      () => {
-        previewButton.style.borderColor =
-          "rgba(96, 165, 250, 0.8)";
-      }
-    );
-
-    previewButton.addEventListener(
-      "mouseleave",
-      () => {
-        previewButton.style.borderColor =
-          "rgba(255, 255, 255, 0.12)";
-      }
-    );
-
-    previewButton.addEventListener(
-      "click",
-      () => {
-        showEnlargedImage(
-          entry.imageDataUrl,
-          entry.text
-        );
-      }
-    );
-
-    contentRow.appendChild(
-      previewButton
-    );
-  }
-
-  item.appendChild(contentRow);
-
-  return item;
-} {
+  function createHistoryItem(entry) {
     const item =
-      document.createElement("article");
+      document.createElement(
+        "article"
+      );
 
     Object.assign(item.style, {
-      padding: "10px",
+      padding: "0.75em",
       border:
         "1px solid rgba(255, 255, 255, 0.1)",
-      borderRadius: "8px",
+      borderRadius: "0.6em",
       background: "#1f2937"
     });
 
-    if (
-      typeof entry?.imageDataUrl ===
-        "string" &&
-      entry.imageDataUrl
-    ) {
-      const previewButton =
-        document.createElement("button");
-
-      previewButton.type = "button";
-      previewButton.title =
-        "Click to enlarge screenshot";
-
-      previewButton.setAttribute(
-        "aria-label",
-        "Enlarge screenshot"
-      );
-
-      Object.assign(previewButton.style, {
-  display: "block",
-  width: "180px",
-  maxWidth: "100%",
-  margin: "0 auto 9px",
-  padding: "0",
-  border:
-    "1px solid rgba(255, 255, 255, 0.12)",
-  borderRadius: "7px",
-  overflow: "hidden",
-  cursor: "zoom-in",
-  background: "#0f172a"
-});
-
-      const previewImage =
-        document.createElement("img");
-
-      previewImage.src =
-        entry.imageDataUrl;
-
-      previewImage.alt =
-        "Screenshot used for this translation";
-
-Object.assign(previewImage.style, {
-  display: "block",
-  width: "100%",
-  height: "100px",
-  objectFit: "contain",
-  background: "#0f172a"
-});
-
-      previewButton.appendChild(
-        previewImage
-      );
-
-      previewButton.addEventListener(
-        "click",
-        () => {
-          showEnlargedImage(
-            entry.imageDataUrl,
-            entry.text
-          );
-        }
-      );
-
-      item.appendChild(
-        previewButton
-      );
-    }
-
     const itemHeader =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
 
     Object.assign(
       itemHeader.style,
@@ -1283,13 +1133,15 @@ Object.assign(previewImage.style, {
         alignItems: "center",
         justifyContent:
           "space-between",
-        gap: "8px",
-        marginBottom: "6px"
+        gap: "0.6em",
+        marginBottom: "0.55em"
       }
     );
 
     const time =
-      document.createElement("span");
+      document.createElement(
+        "span"
+      );
 
     time.textContent =
       formatHistoryTime(
@@ -1298,28 +1150,22 @@ Object.assign(previewImage.style, {
 
     Object.assign(time.style, {
       color: "#94a3b8",
-      font:
-        "10px system-ui, sans-serif"
+      fontSize: "0.72em"
     });
 
     const copyHistoryButton =
-      document.createElement("button");
-
-    copyHistoryButton.type = "button";
-    copyHistoryButton.textContent =
-      "Copy";
+      createButton(
+        "Copy",
+        "#374151"
+      );
 
     Object.assign(
       copyHistoryButton.style,
       {
-        padding: "4px 8px",
-        border: "0",
-        borderRadius: "5px",
-        cursor: "pointer",
-        background: "#374151",
-        color: "#ffffff",
-        font:
-          "600 10px system-ui, sans-serif"
+        flex: "0 0 auto",
+        padding:
+          "0.35em 0.65em",
+        fontSize: "0.72em"
       }
     );
 
@@ -1339,29 +1185,465 @@ Object.assign(previewImage.style, {
       copyHistoryButton
     );
 
+    const contentRow =
+      document.createElement(
+        "div"
+      );
+
+    Object.assign(
+      contentRow.style,
+      {
+        display: "flex",
+        alignItems: "stretch",
+        gap: "0.7em",
+        width: "100%",
+        minHeight: "5em",
+        maxHeight: "18em"
+      }
+    );
+
     const itemText =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
 
     itemText.textContent =
       entry?.text ||
       "No translation text.";
 
-Object.assign(itemText.style, {
-  maxHeight: "200px",
-  overflow: "auto",
-  color: "#f3f4f6",
-  whiteSpace: "pre-wrap",
-  overflowWrap: "anywhere",
-  font:
-    "15px/1.55 system-ui, sans-serif"
-});
+    Object.assign(
+      itemText.style,
+      {
+        flex: "1 1 62%",
+        minWidth: "0",
+        maxHeight: "18em",
+        overflow: "auto",
+        boxSizing: "border-box",
+        padding: "0.55em",
+        borderRadius: "0.45em",
+        background: "#111827",
+        color: "#f3f4f6",
+        whiteSpace: "pre-wrap",
+        overflowWrap: "anywhere",
+        fontSize: "1.08em",
+        lineHeight: "1.55"
+      }
+    );
 
-    item.append(
-      itemHeader,
+    contentRow.appendChild(
       itemText
     );
 
+    if (
+      typeof entry?.imageDataUrl ===
+        "string" &&
+      entry.imageDataUrl
+    ) {
+      const previewButton =
+        document.createElement(
+          "button"
+        );
+
+      previewButton.type =
+        "button";
+
+      previewButton.title =
+        "Click to enlarge screenshot";
+
+      previewButton.setAttribute(
+        "aria-label",
+        "Enlarge screenshot used for this translation"
+      );
+
+      Object.assign(
+        previewButton.style,
+        {
+          position: "relative",
+          flex: "0 0 36%",
+          minWidth: "5.5em",
+          minHeight: "5em",
+          alignSelf: "stretch",
+          padding: "0",
+          border:
+            "1px solid rgba(255, 255, 255, 0.12)",
+          borderRadius: "0.5em",
+          overflow: "hidden",
+          cursor: "zoom-in",
+          background: "#0f172a"
+        }
+      );
+
+      const previewImage =
+        document.createElement(
+          "img"
+        );
+
+      previewImage.src =
+        entry.imageDataUrl;
+
+      previewImage.alt =
+        "Screenshot used for this translation";
+
+      Object.assign(
+        previewImage.style,
+        {
+          position: "absolute",
+          inset: "0",
+          display: "block",
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+          background: "#0f172a"
+        }
+      );
+
+      previewButton.appendChild(
+        previewImage
+      );
+
+      previewButton.addEventListener(
+        "click",
+        () => {
+          showEnlargedImage(
+            entry.imageDataUrl,
+            entry.text
+          );
+        }
+      );
+
+      contentRow.appendChild(
+        previewButton
+      );
+    }
+
+    item.append(
+      itemHeader,
+      contentRow
+    );
+
     return item;
+  }
+
+  function makePanelDraggable(
+    panel,
+    handle,
+    ignoredElement
+  ) {
+    let dragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    const onPointerDown = (
+      event
+    ) => {
+      if (
+        event.button !== 0 ||
+        event.target ===
+          ignoredElement ||
+        ignoredElement.contains(
+          event.target
+        )
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const rectangle =
+        panel.getBoundingClientRect();
+
+      panel.style.left =
+        `${rectangle.left}px`;
+
+      panel.style.top =
+        `${rectangle.top}px`;
+
+      panel.style.right =
+        "auto";
+
+      dragging = true;
+
+      offsetX =
+        event.clientX -
+        rectangle.left;
+
+      offsetY =
+        event.clientY -
+        rectangle.top;
+
+      try {
+        handle.setPointerCapture(
+          event.pointerId
+        );
+      } catch {
+        // Pointer capture is optional.
+      }
+    };
+
+    const onPointerMove = (
+      event
+    ) => {
+      if (!dragging) {
+        return;
+      }
+
+      const maximumLeft =
+        Math.max(
+          0,
+          window.innerWidth -
+          panel.offsetWidth
+        );
+
+      const maximumTop =
+        Math.max(
+          0,
+          window.innerHeight -
+          panel.offsetHeight
+        );
+
+      const left = Math.min(
+        maximumLeft,
+        Math.max(
+          0,
+          event.clientX -
+          offsetX
+        )
+      );
+
+      const top = Math.min(
+        maximumTop,
+        Math.max(
+          0,
+          event.clientY -
+          offsetY
+        )
+      );
+
+      panel.style.left =
+        `${left}px`;
+
+      panel.style.top =
+        `${top}px`;
+    };
+
+    const stopDragging = () => {
+      dragging = false;
+    };
+
+    handle.addEventListener(
+      "pointerdown",
+      onPointerDown
+    );
+
+    handle.addEventListener(
+      "pointermove",
+      onPointerMove
+    );
+
+    handle.addEventListener(
+      "pointerup",
+      stopDragging
+    );
+
+    handle.addEventListener(
+      "pointercancel",
+      stopDragging
+    );
+  }
+
+  function makePanelContentResponsive(
+    panel
+  ) {
+    const updateScale = () => {
+      const width =
+        panel.getBoundingClientRect()
+          .width;
+
+      /*
+       * Scale text between approximately 11px and 18px as the panel
+       * is resized. Screenshot widths use percentages and therefore
+       * resize automatically with the panel.
+       */
+      const scale = Math.min(
+        1.3,
+        Math.max(
+          0.78,
+          width / 520
+        )
+      );
+
+      panel.style.fontSize =
+        `${14 * scale}px`;
+    };
+
+    updateScale();
+
+    if (
+      typeof ResizeObserver ===
+      "function"
+    ) {
+      const observer =
+        new ResizeObserver(() => {
+          updateScale();
+          keepPanelOnScreen(
+            panel
+          );
+        });
+
+      observer.observe(panel);
+
+      panel.__tamuResizeObserver =
+        observer;
+    }
+  }
+
+  function keepPanelOnScreen(
+    panel
+  ) {
+    const rectangle =
+      panel.getBoundingClientRect();
+
+    let left =
+      rectangle.left;
+
+    let top =
+      rectangle.top;
+
+    if (
+      rectangle.right >
+      window.innerWidth
+    ) {
+      left = Math.max(
+        0,
+        window.innerWidth -
+        rectangle.width
+      );
+    }
+
+    if (
+      rectangle.bottom >
+      window.innerHeight
+    ) {
+      top = Math.max(
+        0,
+        window.innerHeight -
+        rectangle.height
+      );
+    }
+
+    if (left < 0) {
+      left = 0;
+    }
+
+    if (top < 0) {
+      top = 0;
+    }
+
+    if (
+      left !== rectangle.left ||
+      top !== rectangle.top
+    ) {
+      panel.style.left =
+        `${left}px`;
+
+      panel.style.top =
+        `${top}px`;
+
+      panel.style.right =
+        "auto";
+    }
+  }
+
+  function getOrderedHistory(
+    history,
+    currentText
+  ) {
+    const ordered =
+      Array.isArray(history)
+        ? history
+            .filter((entry) => {
+              return (
+                entry &&
+                typeof entry.text ===
+                  "string"
+              );
+            })
+            .map((entry) => ({
+              ...entry
+            }))
+        : [];
+
+    ordered.sort(
+      (first, second) => {
+        return (
+          getEntryTimestamp(first) -
+          getEntryTimestamp(second)
+        );
+      }
+    );
+
+    if (
+      ordered.length === 0 &&
+      typeof currentText ===
+        "string" &&
+      currentText.trim()
+    ) {
+      ordered.push({
+        id:
+          `temporary-${Date.now()}`,
+        text:
+          currentText.trim(),
+        imageDataUrl: "",
+        createdAt:
+          new Date().toISOString()
+      });
+    }
+
+    return ordered.slice(-5);
+  }
+
+  function getEntryTimestamp(
+    entry
+  ) {
+    const timestamp =
+      new Date(
+        entry?.createdAt || 0
+      ).getTime();
+
+    return Number.isFinite(
+      timestamp
+    )
+      ? timestamp
+      : 0;
+  }
+
+  function createButton(
+    label,
+    background
+  ) {
+    const button =
+      document.createElement(
+        "button"
+      );
+
+    button.type = "button";
+    button.textContent = label;
+
+    Object.assign(button.style, {
+      minWidth: "0",
+      padding: "0.7em 0.85em",
+      border: "0",
+      borderRadius: "0.5em",
+      cursor: "pointer",
+      background,
+      color: "#ffffff",
+      fontFamily:
+        "system-ui, sans-serif",
+      fontSize: "0.86em",
+      fontWeight: "600"
+    });
+
+    return button;
   }
 
   async function copyTextWithFeedback(
@@ -1374,9 +1656,11 @@ Object.assign(itemText.style, {
         value
       );
 
-      button.textContent = "Copied";
+      button.textContent =
+        "Copied";
     } catch {
-      button.textContent = "Copy failed";
+      button.textContent =
+        "Copy failed";
     }
 
     setTimeout(() => {
@@ -1394,9 +1678,12 @@ Object.assign(itemText.style, {
     removeImageModal();
 
     const modal =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
 
-    modal.id = IDS.imageModal;
+    modal.id =
+      IDS.imageModal;
 
     Object.assign(modal.style, {
       position: "fixed",
@@ -1407,12 +1694,15 @@ Object.assign(itemText.style, {
       justifyContent: "center",
       padding: "24px",
       boxSizing: "border-box",
-      background: "rgba(0, 0, 0, 0.88)",
+      background:
+        "rgba(0, 0, 0, 0.88)",
       cursor: "zoom-out"
     });
 
     const modalContent =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
 
     Object.assign(
       modalContent.style,
@@ -1429,7 +1719,9 @@ Object.assign(itemText.style, {
     );
 
     const enlargedImage =
-      document.createElement("img");
+      document.createElement(
+        "img"
+      );
 
     enlargedImage.src =
       imageDataUrl;
@@ -1452,10 +1744,15 @@ Object.assign(itemText.style, {
     );
 
     const closeButton =
-      document.createElement("button");
+      document.createElement(
+        "button"
+      );
 
-    closeButton.type = "button";
-    closeButton.textContent = "×";
+    closeButton.type =
+      "button";
+
+    closeButton.textContent =
+      "×";
 
     closeButton.setAttribute(
       "aria-label",
@@ -1491,7 +1788,9 @@ Object.assign(itemText.style, {
 
     if (translationText) {
       const caption =
-        document.createElement("div");
+        document.createElement(
+          "div"
+        );
 
       caption.textContent =
         translationText;
@@ -1503,13 +1802,16 @@ Object.assign(itemText.style, {
             "min(800px, 90vw)",
           maxHeight: "120px",
           overflow: "auto",
-          boxSizing: "border-box",
+          boxSizing:
+            "border-box",
           padding: "10px 12px",
           borderRadius: "8px",
           background: "#111827",
           color: "#f3f4f6",
-          whiteSpace: "pre-wrap",
-          overflowWrap: "anywhere",
+          whiteSpace:
+            "pre-wrap",
+          overflowWrap:
+            "anywhere",
           font:
             "16px/1.55 system-ui, sans-serif"
         }
@@ -1524,7 +1826,9 @@ Object.assign(itemText.style, {
       modalContent
     );
 
-    const onKeyDown = (event) => {
+    const onKeyDown = (
+      event
+    ) => {
       if (event.key === "Escape") {
         removeImageModal();
       }
@@ -1543,7 +1847,9 @@ Object.assign(itemText.style, {
     modal.addEventListener(
       "click",
       (event) => {
-        if (event.target === modal) {
+        if (
+          event.target === modal
+        ) {
           removeImageModal();
         }
       }
@@ -1571,7 +1877,8 @@ Object.assign(itemText.style, {
     }
 
     if (
-      typeof modal.__tamuKeydownHandler ===
+      typeof modal
+        .__tamuKeydownHandler ===
       "function"
     ) {
       document.removeEventListener(
@@ -1584,15 +1891,20 @@ Object.assign(itemText.style, {
     modal.remove();
   }
 
-  function formatHistoryTime(value) {
+  function formatHistoryTime(
+    value
+  ) {
     if (!value) {
       return "Previous translation";
     }
 
-    const date = new Date(value);
+    const date =
+      new Date(value);
 
     if (
-      Number.isNaN(date.getTime())
+      Number.isNaN(
+        date.getTime()
+      )
     ) {
       return "Previous translation";
     }
@@ -1607,6 +1919,21 @@ Object.assign(itemText.style, {
   }
 
   function removeElement(id) {
-    document.getElementById(id)?.remove();
+    const element =
+      document.getElementById(id);
+
+    if (!element) {
+      return;
+    }
+
+    if (
+      element.__tamuResizeObserver
+    ) {
+      element
+        .__tamuResizeObserver
+        .disconnect();
+    }
+
+    element.remove();
   }
 })();
