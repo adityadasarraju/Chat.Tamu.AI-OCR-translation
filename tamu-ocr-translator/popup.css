@@ -8,18 +8,15 @@
     "Segoe UI",
     sans-serif;
 }
-.history-button {
-  width: 100%;
-  margin-top: 8px;
-  padding: 11px;
-}
+
 * {
   box-sizing: border-box;
 }
 
 body {
-  width: 370px;
+  width: 390px;
   margin: 0;
+  overflow-x: hidden;
   background: #111827;
   color: #f9fafb;
 }
@@ -41,7 +38,7 @@ h1 {
   line-height: 1.45;
 }
 
-label {
+label:not(.option-row) {
   display: block;
   margin: 12px 0 6px;
   color: #f3f4f6;
@@ -49,7 +46,7 @@ label {
   font-weight: 700;
 }
 
-input,
+input:not([type="checkbox"]),
 select {
   width: 100%;
   min-width: 0;
@@ -63,7 +60,7 @@ select {
   font-size: 13px;
 }
 
-input:focus,
+input:not([type="checkbox"]):focus,
 select:focus {
   border-color: #60a5fa;
   box-shadow: 0 0 0 2px rgb(96 165 250 / 20%);
@@ -90,7 +87,9 @@ button {
   font-weight: 700;
 }
 
-button:disabled {
+button:disabled,
+input:disabled,
+select:disabled {
   cursor: wait;
   opacity: 0.65;
 }
@@ -117,10 +116,83 @@ button:disabled {
   background: #4b5563;
 }
 
+.history-button {
+  width: 100%;
+  margin-top: 8px;
+  padding: 11px;
+}
+
 .model-help {
   margin: 7px 0 0;
   color: #94a3b8;
   font-size: 10px;
+  line-height: 1.4;
+}
+
+.translation-options {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.option-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  background: #1f2937;
+  cursor: pointer;
+  user-select: none;
+}
+
+.option-row:hover {
+  border-color: #4b5563;
+  background: #253044;
+}
+
+.option-row:has(input:checked) {
+  border-color: #3b82f6;
+  background: rgb(37 99 235 / 12%);
+}
+
+.option-row:focus-within {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgb(96 165 250 / 18%);
+}
+
+.option-row input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin: 2px 0 0;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.option-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.option-title {
+  color: #f3f4f6;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.option-description {
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 400;
   line-height: 1.4;
 }
 
@@ -141,4 +213,73 @@ button:disabled {
   color: #94a3b8;
   font-size: 10px;
   line-height: 1.4;
+}
+
+.cost-toast {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  left: 14px;
+  z-index: 1000;
+  padding: 11px 12px;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  background: #451a03;
+  color: #fde68a;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+}
+
+.cost-toast.show {
+  animation: show-cost-toast 5s ease forwards;
+}
+
+@keyframes show-cost-toast {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  5% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /*
+   * 60% of five seconds is three seconds.
+   * The toast fades from three seconds through five seconds.
+   */
+  60% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cost-toast.show {
+    animation-name: show-cost-toast-reduced;
+  }
+
+  @keyframes show-cost-toast-reduced {
+    0%,
+    60% {
+      opacity: 1;
+      transform: none;
+    }
+
+    100% {
+      opacity: 0;
+      transform: none;
+    }
+  }
 }
