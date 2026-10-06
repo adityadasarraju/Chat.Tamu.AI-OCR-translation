@@ -99,7 +99,7 @@
       document.createElement("div");
 
     instructions.textContent =
-      "Drag around Japanese or Korean text • Press Esc to cancel";
+      "Drag around foreign text • Press Esc to cancel";
 
     Object.assign(instructions.style, {
       position: "fixed",
