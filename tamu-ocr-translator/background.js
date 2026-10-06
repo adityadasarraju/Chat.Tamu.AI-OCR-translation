@@ -6,8 +6,7 @@ const DEFAULT_MODEL =
   "protected.gemini-2.5-flash";
 
 const HISTORY_STORAGE_KEY =
-  "translationHishistory
-  tory";
+  "translationHistory";
 
 const MAX_HISTORY_ITEMS = 10;
 
