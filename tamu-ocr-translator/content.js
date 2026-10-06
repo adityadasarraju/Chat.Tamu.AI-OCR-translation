@@ -32,28 +32,38 @@ const IDS = {
         return;
       }
 
-      if (message.type === "OCR_CROP_SCREENSHOT") {
-        cropScreenshot(
-          message.screenshotDataUrl,
-          message.selection
-        )
-          .then((imageDataUrl) => {
-            sendResponse({
-              ok: true,
-              imageDataUrl
-            });
-          })
-          .catch((error) => {
-            sendResponse({
-              ok: false,
-              error:
-                error.message ||
-                "Could not crop the screenshot."
-            });
-          });
+if (message.type === "OCR_CROP_SCREENSHOT") {
+  cropScreenshot(
+    message.screenshotDataUrl,
+    message.selection
+  )
+    .then(async (imageDataUrl) => {
+      /*
+       * The full-quality PNG goes to the OCR model.
+       * A smaller JPEG is retained for history.
+       */
+      const historyImageDataUrl =
+        await createHistoryPreview(
+          imageDataUrl
+        );
 
-        return true;
-      }
+      sendResponse({
+        ok: true,
+        imageDataUrl,
+        historyImageDataUrl
+      });
+    })
+    .catch((error) => {
+      sendResponse({
+        ok: false,
+        error:
+          error.message ||
+          "Could not crop the screenshot."
+      });
+    });
+
+  return true;
+}
 
       if (message.type === "OCR_SHOW_STATUS") {
         showResultPanel({
