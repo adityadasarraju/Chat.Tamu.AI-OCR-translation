@@ -6,9 +6,10 @@ const DEFAULT_MODEL =
   "protected.gemini-2.5-flash";
 
 const HISTORY_STORAGE_KEY =
-  "translationHistory";
+  "translationHishistory
+  tory";
 
-const MAX_HISTORY_ITEMS = 5;
+const MAX_HISTORY_ITEMS = 10;
 
 chrome.runtime.onMessage.addListener(
   (message, sender, sendResponse) => {
