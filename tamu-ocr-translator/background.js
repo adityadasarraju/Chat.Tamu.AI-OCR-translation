@@ -151,7 +151,33 @@ chrome.runtime.onMessage.addListener(
 
       return false;
     }
+if (
+  message.type ===
+  "RESET_TRANSLATION_HISTORY"
+) {
+  resetTranslationHistory()
+    .then(() => {
+      sendResponse({
+        ok: true,
+        history: []
+      });
+    })
+    .catch((error) => {
+      console.error(
+        "Could not reset translation history:",
+        error
+      );
 
+      sendResponse({
+        ok: false,
+        error:
+          error?.message ||
+          "Could not reset translation history."
+      });
+    });
+
+  return true;
+}
     return false;
   }
 );
@@ -488,6 +514,42 @@ async function clearTranslationHistory() {
   await chrome.storage.session.remove(
     HISTORY_STORAGE_KEY
   );
+}
+
+async function resetTranslationHistory() {
+  /*
+   * Delete the five saved translations.
+   */
+  await chrome.storage.session.remove(
+    HISTORY_STORAGE_KEY
+  );
+
+  /*
+   * Delete the history panel's saved size and location.
+   */
+  await chrome.storage.local.remove(
+    PANEL_GEOMETRY_STORAGE_KEY
+  );
+
+  /*
+   * Tell the active page to close any visible history panel and clear
+   * its in-memory geometry cache.
+   */
+  const [tab] =
+    await chrome.tabs.query({
+      active: true,
+      currentWindow: true
+    });
+
+  if (tab?.id) {
+    await sendMessageSafely(
+      tab.id,
+      {
+        type:
+          "OCR_RESET_HISTORY_UI"
+      }
+    );
+  }
 }
 
 function createHistoryId() {
