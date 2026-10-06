@@ -216,6 +216,52 @@
       select a different model.
     </p>
 
+    <section
+      class="translation-options"
+      aria-label="Translation enhancement options"
+    >
+      <label
+        class="option-row"
+        for="aiProofreader"
+      >
+        <input
+          id="aiProofreader"
+          type="checkbox"
+        >
+
+        <span class="option-copy">
+          <span class="option-title">
+            AI proofreader (slightly more expensive)
+          </span>
+
+          <span class="option-description">
+            Improve English grammar and readability.
+          </span>
+        </span>
+      </label>
+
+      <label
+        class="option-row"
+        for="smoothDialogue"
+      >
+        <input
+          id="smoothDialogue"
+          type="checkbox"
+        >
+
+        <span class="option-copy">
+          <span class="option-title">
+            Smooth Dialogue (more expensive)
+          </span>
+
+          <span class="option-description">
+            Reference recent translations for consistent dialogue,
+            names, tone, and context.
+          </span>
+        </span>
+      </label>
+    </section>
+
     <button
       id="translateButton"
       class="primary"
@@ -243,6 +289,14 @@
       The selected screenshot is sent directly to chat-api.tamu.ai.
     </p>
   </main>
+
+  <div
+    id="costToast"
+    class="cost-toast"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+  ></div>
 
   <script src="popup.js"></script>
 </body>
