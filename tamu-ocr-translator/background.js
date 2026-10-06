@@ -8,6 +8,9 @@ const DEFAULT_MODEL =
 const HISTORY_STORAGE_KEY =
   "translationHistory";
 
+const PANEL_GEOMETRY_STORAGE_KEY =
+  "translationPanelGeometry";
+
 const MAX_HISTORY_ITEMS = 10;
 
 chrome.runtime.onMessage.addListener(
