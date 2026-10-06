@@ -9,14 +9,16 @@
 
   window.__tamuOcrTranslatorLoaded = true;
 
-  const IDS = {
-    selectionOverlay:
-      "__tamu_ocr_selection_overlay",
-    selectionBox:
-      "__tamu_ocr_selection_box",
-    resultPanel:
-      "__tamu_ocr_result_panel"
-  };
+const IDS = {
+  selectionOverlay:
+    "__tamu_ocr_selection_overlay",
+  selectionBox:
+    "__tamu_ocr_selection_box",
+  resultPanel:
+    "__tamu_ocr_result_panel",
+  imageModal:
+    "__tamu_ocr_image_modal"
+};
 
   chrome.runtime.onMessage.addListener(
     (message, sender, sendResponse) => {
