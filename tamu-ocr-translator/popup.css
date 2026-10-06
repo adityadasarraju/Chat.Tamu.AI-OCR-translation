@@ -282,4 +282,18 @@ select:disabled {
       transform: none;
     }
   }
+  .reset-history-button {
+  width: 100%;
+  margin-top: 8px;
+  padding: 11px;
+  border: 1px solid #7f1d1d;
+  background: #450a0a;
+  color: #fecaca;
+}
+
+.reset-history-button:hover:not(:disabled) {
+  border-color: #b91c1c;
+  background: #7f1d1d;
+  color: #ffffff;
+}
 }
