@@ -15,6 +15,30 @@
     imageModal:
       "__tamu_ocr_image_modal"
   };
+  const PANEL_GEOMETRY_KEY =
+  "translationPanelGeometry";
+
+let cachedPanelGeometry = null;
+
+/*
+ * Preload the saved position and size.
+ */
+chrome.storage.local
+  .get([PANEL_GEOMETRY_KEY])
+  .then((storedData) => {
+    const geometry =
+      storedData[PANEL_GEOMETRY_KEY];
+
+    if (isValidPanelGeometry(geometry)) {
+      cachedPanelGeometry = geometry;
+    }
+  })
+  .catch((error) => {
+    console.warn(
+      "Could not load the saved panel geometry:",
+      error
+    );
+  });
 
   chrome.runtime.onMessage.addListener(
     (message, sender, sendResponse) => {
@@ -663,6 +687,11 @@
 
     panel.id =
       IDS.resultPanel;
+    /*
+ * Prevent the ResizeObserver from saving the default size before the
+ * previously saved geometry has been restored.
+ */
+panel.__tamuGeometryReady = false;
 
     Object.assign(panel.style, {
       position: "fixed",
@@ -1095,17 +1124,38 @@
       );
     }
 
-    document.documentElement.appendChild(
-      panel
-    );
+document.documentElement.appendChild(
+  panel
+);
 
+/*
+ * Restore the user-selected size and position whenever the panel
+ * reopens after a new translation.
+ */
+restorePanelGeometry(panel)
+  .catch((restoreError) => {
+    console.warn(
+      "Could not restore panel geometry:",
+      restoreError
+    );
+  })
+  .finally(() => {
     keepPanelOnScreen(panel);
 
-if (!error && !status) {
-  scrollToNewestTranslation(
-    scrollingBody
-  );
-}
+    panel.__tamuGeometryReady = true;
+
+    /*
+     * Save again in case the viewport changed and keepPanelOnScreen()
+     * had to adjust the saved position.
+     */
+    schedulePanelGeometrySave(panel);
+
+    if (!error && !status) {
+      scrollToNewestTranslation(
+        scrollingBody
+      );
+    }
+  });
   }
 function scrollToNewestTranslation(
   scrollingBody
@@ -1390,178 +1440,355 @@ function scrollToNewestTranslation(
     return item;
   }
 
-  function makePanelDraggable(
-    panel,
-    handle,
-    ignoredElement
-  ) {
-    let dragging = false;
-    let offsetX = 0;
-    let offsetY = 0;
+function makePanelDraggable(
+  panel,
+  handle,
+  ignoredElement
+) {
+  let dragging = false;
+  let offsetX = 0;
+  let offsetY = 0;
 
-    const onPointerDown = (
-      event
-    ) => {
-      if (
-        event.button !== 0 ||
-        event.target ===
-          ignoredElement ||
-        ignoredElement.contains(
-          event.target
-        )
-      ) {
-        return;
-      }
+  const onPointerDown = (event) => {
+    if (
+      event.button !== 0 ||
+      event.target === ignoredElement ||
+      ignoredElement.contains(event.target)
+    ) {
+      return;
+    }
 
-      event.preventDefault();
+    event.preventDefault();
 
-      const rectangle =
-        panel.getBoundingClientRect();
+    const rectangle =
+      panel.getBoundingClientRect();
 
-      panel.style.left =
-        `${rectangle.left}px`;
+    panel.style.left =
+      `${rectangle.left}px`;
 
-      panel.style.top =
-        `${rectangle.top}px`;
+    panel.style.top =
+      `${rectangle.top}px`;
 
-      panel.style.right =
-        "auto";
+    panel.style.right = "auto";
 
-      dragging = true;
+    dragging = true;
 
-      offsetX =
-        event.clientX -
-        rectangle.left;
+    offsetX =
+      event.clientX - rectangle.left;
 
-      offsetY =
-        event.clientY -
-        rectangle.top;
+    offsetY =
+      event.clientY - rectangle.top;
 
-      try {
-        handle.setPointerCapture(
-          event.pointerId
-        );
-      } catch {
-        // Pointer capture is optional.
-      }
-    };
-
-    const onPointerMove = (
-      event
-    ) => {
-      if (!dragging) {
-        return;
-      }
-
-      const maximumLeft =
-        Math.max(
-          0,
-          window.innerWidth -
-          panel.offsetWidth
-        );
-
-      const maximumTop =
-        Math.max(
-          0,
-          window.innerHeight -
-          panel.offsetHeight
-        );
-
-      const left = Math.min(
-        maximumLeft,
-        Math.max(
-          0,
-          event.clientX -
-          offsetX
-        )
+    try {
+      handle.setPointerCapture(
+        event.pointerId
       );
+    } catch {
+      // Pointer capture is optional.
+    }
+  };
 
-      const top = Math.min(
-        maximumTop,
-        Math.max(
-          0,
-          event.clientY -
-          offsetY
-        )
-      );
+  const onPointerMove = (event) => {
+    if (!dragging) {
+      return;
+    }
 
-      panel.style.left =
-        `${left}px`;
-
-      panel.style.top =
-        `${top}px`;
-    };
-
-    const stopDragging = () => {
-      dragging = false;
-    };
-
-    handle.addEventListener(
-      "pointerdown",
-      onPointerDown
+    const maximumLeft = Math.max(
+      0,
+      window.innerWidth -
+        panel.offsetWidth
     );
 
-    handle.addEventListener(
-      "pointermove",
-      onPointerMove
+    const maximumTop = Math.max(
+      0,
+      window.innerHeight -
+        panel.offsetHeight
     );
 
-    handle.addEventListener(
+    const left = Math.min(
+      maximumLeft,
+      Math.max(
+        0,
+        event.clientX - offsetX
+      )
+    );
+
+    const top = Math.min(
+      maximumTop,
+      Math.max(
+        0,
+        event.clientY - offsetY
+      )
+    );
+
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.style.right = "auto";
+  };
+
+  const stopDragging = () => {
+    if (!dragging) {
+      return;
+    }
+
+    dragging = false;
+
+    /*
+     * Remember the position after the user finishes dragging.
+     */
+    savePanelGeometry(panel);
+  };
+
+  handle.addEventListener(
+    "pointerdown",
+    onPointerDown
+  );
+
+  handle.addEventListener(
+    "pointermove",
+    onPointerMove
+  );
+
+  handle.addEventListener(
+    "pointerup",
+    stopDragging
+  );
+
+  handle.addEventListener(
+    "pointercancel",
+    stopDragging
+  );
+
+  /*
+   * Handle pointer release outside the header.
+   */
+  document.addEventListener(
+    "pointerup",
+    stopDragging
+  );
+
+  panel.__tamuDragCleanup = () => {
+    document.removeEventListener(
       "pointerup",
       stopDragging
     );
+  };
+}
 
-    handle.addEventListener(
-      "pointercancel",
-      stopDragging
+function makePanelContentResponsive(
+  panel
+) {
+  const updateScale = () => {
+    const width =
+      panel.getBoundingClientRect().width;
+
+    /*
+     * Scale the text as the panel width changes. Preview images already
+     * use percentages and scale automatically.
+     */
+    const scale = Math.min(
+      1.3,
+      Math.max(
+        0.78,
+        width / 520
+      )
+    );
+
+    panel.style.fontSize =
+      `${14 * scale}px`;
+  };
+
+  updateScale();
+
+  if (
+    typeof ResizeObserver ===
+    "function"
+  ) {
+    const observer =
+      new ResizeObserver(() => {
+        updateScale();
+        keepPanelOnScreen(panel);
+
+        /*
+         * Remember the resized dimensions after resizing settles.
+         */
+        if (
+          panel.__tamuGeometryReady
+        ) {
+          schedulePanelGeometrySave(
+            panel
+          );
+        }
+      });
+
+    observer.observe(panel);
+
+    panel.__tamuResizeObserver =
+      observer;
+  }
+}
+  function isValidPanelGeometry(
+  geometry
+) {
+  return Boolean(
+    geometry &&
+    Number.isFinite(geometry.left) &&
+    Number.isFinite(geometry.top) &&
+    Number.isFinite(geometry.width) &&
+    Number.isFinite(geometry.height) &&
+    geometry.width > 0 &&
+    geometry.height > 0
+  );
+}
+
+async function restorePanelGeometry(
+  panel
+) {
+  let geometry =
+    cachedPanelGeometry;
+
+  /*
+   * Read storage again in case another tab or panel instance changed it.
+   */
+  try {
+    const storedData =
+      await chrome.storage.local.get([
+        PANEL_GEOMETRY_KEY
+      ]);
+
+    const storedGeometry =
+      storedData[PANEL_GEOMETRY_KEY];
+
+    if (
+      isValidPanelGeometry(
+        storedGeometry
+      )
+    ) {
+      geometry = storedGeometry;
+      cachedPanelGeometry =
+        storedGeometry;
+    }
+  } catch (error) {
+    console.warn(
+      "Could not read panel geometry:",
+      error
     );
   }
 
-  function makePanelContentResponsive(
-    panel
+  if (
+    !isValidPanelGeometry(geometry) ||
+    !panel.isConnected
   ) {
-    const updateScale = () => {
-      const width =
-        panel.getBoundingClientRect()
-          .width;
-
-      /*
-       * Scale text between approximately 11px and 18px as the panel
-       * is resized. Screenshot widths use percentages and therefore
-       * resize automatically with the panel.
-       */
-      const scale = Math.min(
-        1.3,
-        Math.max(
-          0.78,
-          width / 520
-        )
-      );
-
-      panel.style.fontSize =
-        `${14 * scale}px`;
-    };
-
-    updateScale();
-
-    if (
-      typeof ResizeObserver ===
-      "function"
-    ) {
-      const observer =
-        new ResizeObserver(() => {
-          updateScale();
-          keepPanelOnScreen(
-            panel
-          );
-        });
-
-      observer.observe(panel);
-
-      panel.__tamuResizeObserver =
-        observer;
-    }
+    return;
   }
+
+  const availableWidth =
+    Math.max(
+      280,
+      window.innerWidth - 12
+    );
+
+  const availableHeight =
+    Math.max(
+      180,
+      window.innerHeight - 12
+    );
+
+  const width = Math.min(
+    geometry.width,
+    availableWidth
+  );
+
+  const height = Math.min(
+    geometry.height,
+    availableHeight
+  );
+
+  const left = Math.min(
+    Math.max(0, geometry.left),
+    Math.max(
+      0,
+      window.innerWidth - width
+    )
+  );
+
+  const top = Math.min(
+    Math.max(0, geometry.top),
+    Math.max(
+      0,
+      window.innerHeight - height
+    )
+  );
+
+  panel.style.width = `${width}px`;
+  panel.style.height = `${height}px`;
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+  panel.style.right = "auto";
+}
+
+function schedulePanelGeometrySave(
+  panel
+) {
+  if (
+    !panel ||
+    !panel.isConnected ||
+    !panel.__tamuGeometryReady
+  ) {
+    return;
+  }
+
+  clearTimeout(
+    panel.__tamuGeometrySaveTimer
+  );
+
+  panel.__tamuGeometrySaveTimer =
+    setTimeout(() => {
+      savePanelGeometry(panel);
+    }, 250);
+}
+
+async function savePanelGeometry(
+  panel
+) {
+  if (
+    !panel ||
+    !panel.isConnected ||
+    !panel.__tamuGeometryReady
+  ) {
+    return;
+  }
+
+  const rectangle =
+    panel.getBoundingClientRect();
+
+  const geometry = {
+    left: Math.round(rectangle.left),
+    top: Math.round(rectangle.top),
+    width: Math.round(rectangle.width),
+    height: Math.round(rectangle.height)
+  };
+
+  if (
+    !isValidPanelGeometry(geometry)
+  ) {
+    return;
+  }
+
+  cachedPanelGeometry = geometry;
+
+  try {
+    await chrome.storage.local.set({
+      [PANEL_GEOMETRY_KEY]:
+        geometry
+    });
+  } catch (error) {
+    console.warn(
+      "Could not save panel geometry:",
+      error
+    );
+  }
+}
 
   function keepPanelOnScreen(
     panel
@@ -1984,22 +2211,33 @@ function scrollToNewestTranslation(
     );
   }
 
-  function removeElement(id) {
-    const element =
-      document.getElementById(id);
+function removeElement(id) {
+  const element =
+    document.getElementById(id);
 
-    if (!element) {
-      return;
-    }
-
-    if (
-      element.__tamuResizeObserver
-    ) {
-      element
-        .__tamuResizeObserver
-        .disconnect();
-    }
-
-    element.remove();
+  if (!element) {
+    return;
   }
+
+  clearTimeout(
+    element.__tamuGeometrySaveTimer
+  );
+
+  if (
+    element.__tamuResizeObserver
+  ) {
+    element
+      .__tamuResizeObserver
+      .disconnect();
+  }
+
+  if (
+    typeof element.__tamuDragCleanup ===
+    "function"
+  ) {
+    element.__tamuDragCleanup();
+  }
+
+  element.remove();
+}
 })();
