@@ -204,9 +204,11 @@ async function handleSelectedRegion({
     cropResponse.imageDataUrl
   );
 
-  const history = await addTranslationToHistory(
-    translatedText
-  );
+const history = await addTranslationToHistory(
+  translatedText,
+  cropResponse.historyImageDataUrl ||
+    cropResponse.imageDataUrl
+);
 
   await sendMessageSafely(tabId, {
     type: "OCR_SHOW_RESULT",
@@ -219,7 +221,10 @@ async function handleSelectedRegion({
  * Save the five most recent successful translations in session storage.
  * Screenshots and API keys are not included in history.
  */
-async function addTranslationToHistory(text) {
+async function addTranslationToHistory(
+  text,
+  imageDataUrl
+) {
   const trimmedText =
     typeof text === "string"
       ? text.trim()
@@ -245,30 +250,91 @@ async function addTranslationToHistory(text) {
       `${Date.now()}-` +
       Math.random().toString(36).slice(2),
     text: trimmedText,
+    imageDataUrl:
+      typeof imageDataUrl === "string"
+        ? imageDataUrl
+        : "",
     createdAt: new Date().toISOString()
   };
 
   /*
-   * Sort all entries from oldest to newest.
-   * Keep only the five most recent entries.
+   * Store entries from oldest to newest.
+   * Keep only the five most recent translations.
    */
-  const updatedHistory = [
+  let updatedHistory = [
     ...existingHistory,
     newEntry
   ]
     .sort((first, second) => {
       return (
-        new Date(first.createdAt).getTime() -
-        new Date(second.createdAt).getTime()
+        getHistoryTimestamp(first) -
+        getHistoryTimestamp(second)
       );
     })
     .slice(-5);
 
-  await chrome.storage.session.set({
-    translationHistory: updatedHistory
-  });
+  try {
+    await chrome.storage.session.set({
+      translationHistory: updatedHistory
+    });
+  } catch (error) {
+    /*
+     * If Chrome's session-storage quota is exceeded, remove the oldest
+     * entries until the history can be saved.
+     */
+    console.warn(
+      "Translation history was too large:",
+      error
+    );
+
+    let saved = false;
+
+    while (
+      updatedHistory.length > 1 &&
+      !saved
+    ) {
+      updatedHistory =
+        updatedHistory.slice(1);
+
+      try {
+        await chrome.storage.session.set({
+          translationHistory:
+            updatedHistory
+        });
+
+        saved = true;
+      } catch {
+        // Continue removing old entries.
+      }
+    }
+
+    if (!saved) {
+      /*
+       * As a final fallback, retain the translation without its image.
+       */
+      updatedHistory = [
+        {
+          ...newEntry,
+          imageDataUrl: ""
+        }
+      ];
+
+      await chrome.storage.session.set({
+        translationHistory: updatedHistory
+      });
+    }
+  }
 
   return updatedHistory;
+}
+
+function getHistoryTimestamp(entry) {
+  const timestamp =
+    new Date(entry?.createdAt).getTime();
+
+  return Number.isFinite(timestamp)
+    ? timestamp
+    : 0;
 }
 
 /*
