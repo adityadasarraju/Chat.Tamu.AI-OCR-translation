@@ -5,13 +5,17 @@ const TAMU_API_URL =
 const DEFAULT_MODEL =
   "protected.gemini-2.5-flash";
 
+const HISTORY_STORAGE_KEY =
+  "translationHistory";
+
 const MAX_HISTORY_ITEMS = 5;
 
-/*
- * Receive messages from the popup and content script.
- */
 chrome.runtime.onMessage.addListener(
   (message, sender, sendResponse) => {
+    if (!message || typeof message.type !== "string") {
+      return false;
+    }
+
     if (message.type === "START_TRANSLATION_SELECTION") {
       startSelection()
         .then(() => {
@@ -20,19 +24,84 @@ chrome.runtime.onMessage.addListener(
           });
         })
         .catch((error) => {
-          console.error("Selection startup failed:", error);
+          console.error(
+            "Selection startup failed:",
+            error
+          );
 
           sendResponse({
             ok: false,
             error:
-              error.message ||
+              error?.message ||
               "Could not start the selection tool."
           });
         });
 
-      /*
-       * Keep the message channel open while startSelection() runs.
-       */
+      return true;
+    }
+
+    if (message.type === "SHOW_TRANSLATION_HISTORY") {
+      showTranslationHistory()
+        .then((history) => {
+          sendResponse({
+            ok: true,
+            history
+          });
+        })
+        .catch((error) => {
+          console.error(
+            "Could not show history:",
+            error
+          );
+
+          sendResponse({
+            ok: false,
+            error:
+              error?.message ||
+              "Could not show translation history."
+          });
+        });
+
+      return true;
+    }
+
+    if (message.type === "GET_TRANSLATION_HISTORY") {
+      getTranslationHistory()
+        .then((history) => {
+          sendResponse({
+            ok: true,
+            history
+          });
+        })
+        .catch((error) => {
+          sendResponse({
+            ok: false,
+            error:
+              error?.message ||
+              "Could not retrieve translation history."
+          });
+        });
+
+      return true;
+    }
+
+    if (message.type === "CLEAR_TRANSLATION_HISTORY") {
+      clearTranslationHistory()
+        .then(() => {
+          sendResponse({
+            ok: true,
+            history: []
+          });
+        })
+        .catch((error) => {
+          sendResponse({
+            ok: false,
+            error:
+              error?.message ||
+              "Could not clear translation history."
+          });
+        });
+
       return true;
     }
 
@@ -45,27 +114,85 @@ chrome.runtime.onMessage.addListener(
         windowId: sender.tab.windowId,
         selection: message.selection
       }).catch(async (error) => {
-        console.error("OCR translation failed:", error);
+        console.error(
+          "OCR translation failed:",
+          error
+        );
 
-        await sendMessageSafely(sender.tab.id, {
-          type: "OCR_SHOW_RESULT",
-          error:
-            error.message ||
-            "OCR and translation failed."
-        });
+        await sendMessageSafely(
+          sender.tab.id,
+          {
+            type: "OCR_SHOW_RESULT",
+            error:
+              error?.message ||
+              "OCR and translation failed."
+          }
+        );
       });
+
+      return false;
     }
+
+    return false;
   }
 );
 
-/*
- * Inject content.js and display the selection overlay.
- */
 async function startSelection() {
-  const [tab] = await chrome.tabs.query({
-    active: true,
-    currentWindow: true
-  });
+  const tab =
+    await getActiveSupportedTab();
+
+  await ensureContentScript(tab.id);
+
+  const response =
+    await chrome.tabs.sendMessage(
+      tab.id,
+      {
+        type: "OCR_START_SELECTION"
+      }
+    );
+
+  if (!response?.ok) {
+    throw new Error(
+      response?.error ||
+      "The page could not start the selection tool."
+    );
+  }
+}
+
+async function showTranslationHistory() {
+  const tab =
+    await getActiveSupportedTab();
+
+  const history =
+    await getTranslationHistory();
+
+  await ensureContentScript(tab.id);
+
+  const response =
+    await chrome.tabs.sendMessage(
+      tab.id,
+      {
+        type: "OCR_SHOW_HISTORY",
+        history
+      }
+    );
+
+  if (!response?.ok) {
+    throw new Error(
+      response?.error ||
+      "The page could not display translation history."
+    );
+  }
+
+  return history;
+}
+
+async function getActiveSupportedTab() {
+  const [tab] =
+    await chrome.tabs.query({
+      active: true,
+      currentWindow: true
+    });
 
   if (!tab?.id) {
     throw new Error(
@@ -76,14 +203,18 @@ async function startSelection() {
   if (!isSupportedPage(tab.url)) {
     throw new Error(
       "Chrome does not allow this extension to run on this page. " +
-      "Open a normal HTTPS website and try again."
+      "Open a normal website and try again."
     );
   }
 
+  return tab;
+}
+
+async function ensureContentScript(tabId) {
   try {
     await chrome.scripting.executeScript({
       target: {
-        tabId: tab.id
+        tabId
       },
       files: [
         "content.js"
@@ -91,38 +222,13 @@ async function startSelection() {
     });
   } catch (error) {
     throw new Error(
-      "Chrome could not load the selection tool on this page. " +
-      "Refresh the page and try again. Details: " +
-      (error.message || "Unknown script injection error.")
-    );
-  }
-
-  try {
-    const response = await chrome.tabs.sendMessage(
-      tab.id,
-      {
-        type: "OCR_START_SELECTION"
-      }
-    );
-
-    if (!response?.ok) {
-      throw new Error(
-        response?.error ||
-        "The page did not start the selection overlay."
-      );
-    }
-  } catch (error) {
-    throw new Error(
-      "The selection tool was loaded, but the page did not respond. " +
+      "Chrome could not load the translation interface on this page. " +
       "Refresh the webpage and try again. Details: " +
-      (error.message || "Unknown messaging error.")
+      (error?.message || "Unknown injection error.")
     );
   }
 }
 
-/*
- * Check whether Chrome allows script injection on the page.
- */
 function isSupportedPage(url) {
   if (!url) {
     return false;
@@ -137,15 +243,11 @@ function isSupportedPage(url) {
     "devtools://"
   ];
 
-  return !restrictedPrefixes.some((prefix) =>
-    url.startsWith(prefix)
+  return !restrictedPrefixes.some(
+    (prefix) => url.startsWith(prefix)
   );
 }
 
-/*
- * Capture the visible tab, crop the selected region, translate it,
- * save the translation, and display the result.
- */
 async function handleSelectedRegion({
   tabId,
   windowId,
@@ -158,7 +260,7 @@ async function handleSelectedRegion({
   }
 
   /*
-   * Capture before displaying the status panel so the panel itself
+   * Capture before showing the status panel so the extension interface
    * is not included in the screenshot.
    */
   const screenshotDataUrl =
@@ -171,7 +273,8 @@ async function handleSelectedRegion({
 
   await sendMessageSafely(tabId, {
     type: "OCR_SHOW_STATUS",
-    message: "Preparing the selected image..."
+    message:
+      "Preparing the selected image..."
   });
 
   const cropResponse =
@@ -200,15 +303,20 @@ async function handleSelectedRegion({
       "Reading and translating with TAMU AI..."
   });
 
-  const translatedText = await translateImage(
-    cropResponse.imageDataUrl
-  );
+  const translatedText =
+    await translateImage(
+      cropResponse.imageDataUrl
+    );
 
-const history = await addTranslationToHistory(
-  translatedText,
-  cropResponse.historyImageDataUrl ||
-    cropResponse.imageDataUrl
-);
+  const previewImage =
+    cropResponse.historyImageDataUrl ||
+    cropResponse.imageDataUrl;
+
+  const history =
+    await addTranslationToHistory(
+      translatedText,
+      previewImage
+    );
 
   await sendMessageSafely(tabId, {
     type: "OCR_SHOW_RESULT",
@@ -217,10 +325,54 @@ const history = await addTranslationToHistory(
   });
 }
 
-/*
- * Save the five most recent successful translations in session storage.
- * Screenshots and API keys are not included in history.
- */
+async function getTranslationHistory() {
+  const stored =
+    await chrome.storage.session.get([
+      HISTORY_STORAGE_KEY
+    ]);
+
+  const history =
+    stored[HISTORY_STORAGE_KEY];
+
+  if (!Array.isArray(history)) {
+    return [];
+  }
+
+  return history
+    .filter((entry) => {
+      return (
+        entry &&
+        typeof entry.text === "string" &&
+        entry.text.trim()
+      );
+    })
+    .map((entry) => ({
+      id:
+        typeof entry.id === "string"
+          ? entry.id
+          : createHistoryId(),
+
+      text: entry.text.trim(),
+
+      imageDataUrl:
+        typeof entry.imageDataUrl === "string"
+          ? entry.imageDataUrl
+          : "",
+
+      createdAt:
+        typeof entry.createdAt === "string"
+          ? entry.createdAt
+          : new Date().toISOString()
+    }))
+    .sort((first, second) => {
+      return (
+        getHistoryTimestamp(first) -
+        getHistoryTimestamp(second)
+      );
+    })
+    .slice(-MAX_HISTORY_ITEMS);
+}
+
 async function addTranslationToHistory(
   text,
   imageDataUrl
@@ -231,35 +383,25 @@ async function addTranslationToHistory(
       : "";
 
   if (!trimmedText) {
-    return [];
+    return getTranslationHistory();
   }
 
-  const storedData =
-    await chrome.storage.session.get([
-      "translationHistory"
-    ]);
-
-  const existingHistory = Array.isArray(
-    storedData.translationHistory
-  )
-    ? storedData.translationHistory
-    : [];
+  const existingHistory =
+    await getTranslationHistory();
 
   const newEntry = {
-    id:
-      `${Date.now()}-` +
-      Math.random().toString(36).slice(2),
+    id: createHistoryId(),
     text: trimmedText,
     imageDataUrl:
       typeof imageDataUrl === "string"
         ? imageDataUrl
         : "",
-    createdAt: new Date().toISOString()
+    createdAt:
+      new Date().toISOString()
   };
 
   /*
-   * Store entries from oldest to newest.
-   * Keep only the five most recent translations.
+   * History is stored oldest-to-newest.
    */
   let updatedHistory = [
     ...existingHistory,
@@ -271,76 +413,95 @@ async function addTranslationToHistory(
         getHistoryTimestamp(second)
       );
     })
-    .slice(-5);
+    .slice(-MAX_HISTORY_ITEMS);
 
   try {
     await chrome.storage.session.set({
-      translationHistory: updatedHistory
+      [HISTORY_STORAGE_KEY]:
+        updatedHistory
     });
+
+    return updatedHistory;
   } catch (error) {
-    /*
-     * If Chrome's session-storage quota is exceeded, remove the oldest
-     * entries until the history can be saved.
-     */
     console.warn(
-      "Translation history was too large:",
+      "History exceeded storage limits. Removing older entries.",
       error
     );
+  }
 
-    let saved = false;
+  /*
+   * If images make history too large, remove the oldest entries until
+   * storage succeeds.
+   */
+  while (updatedHistory.length > 1) {
+    updatedHistory =
+      updatedHistory.slice(1);
 
-    while (
-      updatedHistory.length > 1 &&
-      !saved
-    ) {
-      updatedHistory =
-        updatedHistory.slice(1);
-
-      try {
-        await chrome.storage.session.set({
-          translationHistory:
-            updatedHistory
-        });
-
-        saved = true;
-      } catch {
-        // Continue removing old entries.
-      }
-    }
-
-    if (!saved) {
-      /*
-       * As a final fallback, retain the translation without its image.
-       */
-      updatedHistory = [
-        {
-          ...newEntry,
-          imageDataUrl: ""
-        }
-      ];
-
+    try {
       await chrome.storage.session.set({
-        translationHistory: updatedHistory
+        [HISTORY_STORAGE_KEY]:
+          updatedHistory
       });
+
+      return updatedHistory;
+    } catch {
+      // Continue removing older entries.
     }
   }
 
-  return updatedHistory;
+  /*
+   * Final fallback: retain the newest translation without its image.
+   */
+  const textOnlyEntry = {
+    ...newEntry,
+    imageDataUrl: ""
+  };
+
+  await chrome.storage.session.set({
+    [HISTORY_STORAGE_KEY]: [
+      textOnlyEntry
+    ]
+  });
+
+  return [
+    textOnlyEntry
+  ];
+}
+
+async function clearTranslationHistory() {
+  await chrome.storage.session.remove(
+    HISTORY_STORAGE_KEY
+  );
+}
+
+function createHistoryId() {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  return (
+    `${Date.now()}-` +
+    Math.random().toString(36).slice(2)
+  );
 }
 
 function getHistoryTimestamp(entry) {
   const timestamp =
-    new Date(entry?.createdAt).getTime();
+    new Date(
+      entry?.createdAt || 0
+    ).getTime();
 
   return Number.isFinite(timestamp)
     ? timestamp
     : 0;
 }
 
-/*
- * Send the selected image to TAMU AI.
- */
-async function translateImage(imageDataUrl) {
+async function translateImage(
+  imageDataUrl
+) {
   const sessionData =
     await chrome.storage.session.get([
       "tamuApiKey"
@@ -351,9 +512,12 @@ async function translateImage(imageDataUrl) {
       "tamuModel"
     ]);
 
-  const apiKey = sessionData.tamuApiKey;
+  const apiKey =
+    sessionData.tamuApiKey;
+
   const model =
-    localData.tamuModel || DEFAULT_MODEL;
+    localData.tamuModel ||
+    DEFAULT_MODEL;
 
   if (!apiKey) {
     throw new Error(
@@ -370,13 +534,16 @@ async function translateImage(imageDataUrl) {
 
   const prompt = [
     "Perform OCR on the attached image.",
-    "The image may contain foreign languages that are not english.",
-    "Translate every character into natural English.",
+    "The image may contain Japanese, Korean, or another non-English language.",
+    "Translate every readable non-English passage into natural English.",
     "Preserve line breaks, dialogue order, labels, and general structure.",
     "For vertical Japanese text, determine the natural reading order.",
+    "Translate all readable text from the beginning to the end of the image.",
+    "Do not stop in the middle of a sentence.",
+    "Before responding, verify that every readable text region has been translated.",
     "Do not provide commentary, explanations, or Markdown code fences.",
     "If a small portion is unreadable, replace only that portion with [unreadable].",
-    "Return only the English translation."
+    "Return only the complete English translation."
   ].join(" ");
 
   const requestBody = {
@@ -399,7 +566,7 @@ async function translateImage(imageDataUrl) {
       }
     ],
     temperature: 0.1,
-    max_tokens: 1200,
+    max_tokens: 4000,
     stream: false
   };
 
@@ -411,26 +578,31 @@ async function translateImage(imageDataUrl) {
       {
         method: "POST",
         headers: {
-          "accept": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
+          accept: "application/json",
+          Authorization:
+            `Bearer ${apiKey}`,
+          "Content-Type":
+            "application/json"
         },
-        body: JSON.stringify(requestBody)
+        body:
+          JSON.stringify(requestBody)
       }
     );
-  } catch (error) {
+  } catch {
     throw new Error(
       "Could not connect to the TAMU AI API. " +
       "Check your internet connection and try again."
     );
   }
 
-  const rawResponse = await response.text();
+  const rawResponse =
+    await response.text();
 
   let data;
 
   try {
-    data = parseApiResponse(rawResponse);
+    data =
+      parseApiResponse(rawResponse);
   } catch (error) {
     console.error(
       "TAMU response status:",
@@ -439,7 +611,9 @@ async function translateImage(imageDataUrl) {
 
     console.error(
       "TAMU response content type:",
-      response.headers.get("content-type")
+      response.headers.get(
+        "content-type"
+      )
     );
 
     console.error(
@@ -450,7 +624,7 @@ async function translateImage(imageDataUrl) {
     throw new Error(
       "TAMU AI returned an unreadable response " +
       `(HTTP ${response.status}). ` +
-      (error.message || "")
+      (error?.message || "")
     );
   }
 
@@ -465,6 +639,16 @@ async function translateImage(imageDataUrl) {
   const outputText =
     extractChatCompletionText(data);
 
+  const finishReason =
+    data?.choices?.[0]?.finish_reason;
+
+  if (finishReason === "length") {
+    throw new Error(
+      "The translation reached the model's output limit. " +
+      "Select a smaller region or try a model with a larger output limit."
+    );
+  }
+
   if (!outputText) {
     throw new Error(
       `The model "${model}" returned no translation. ` +
@@ -475,45 +659,41 @@ async function translateImage(imageDataUrl) {
   return outputText.trim();
 }
 
-/*
- * Parse ordinary JSON, server-sent events, or plain-text responses.
- */
-function parseApiResponse(rawResponse) {
-  const trimmedResponse =
+function parseApiResponse(
+  rawResponse
+) {
+  const trimmed =
     rawResponse.trim();
 
-  if (!trimmedResponse) {
+  if (!trimmed) {
     return {};
   }
 
   try {
-    return JSON.parse(trimmedResponse);
+    return JSON.parse(trimmed);
   } catch {
-    // Continue to fallback formats.
+    // Try streaming or plain-text formats.
   }
 
   if (
-    trimmedResponse.startsWith("data:") ||
-    trimmedResponse.includes("\ndata:")
+    trimmed.startsWith("data:") ||
+    trimmed.includes("\ndata:")
   ) {
     return parseEventStreamResponse(
-      trimmedResponse
+      trimmed
     );
   }
 
-  /*
-   * Accept a plain-text successful response as translation text.
-   */
   if (
-    !trimmedResponse.startsWith("<!DOCTYPE") &&
-    !trimmedResponse.startsWith("<html") &&
-    !trimmedResponse.startsWith("<")
+    !trimmed.startsWith("<!DOCTYPE") &&
+    !trimmed.startsWith("<html") &&
+    !trimmed.startsWith("<")
   ) {
     return {
       choices: [
         {
           message: {
-            content: trimmedResponse
+            content: trimmed
           }
         }
       ]
@@ -525,17 +705,21 @@ function parseApiResponse(rawResponse) {
   );
 }
 
-/*
- * Convert a streaming event response into a chat-completion-like result.
- */
-function parseEventStreamResponse(rawResponse) {
+function parseEventStreamResponse(
+  rawResponse
+) {
   const textParts = [];
-  const lines = rawResponse.split(/\r?\n/);
+
+  const lines =
+    rawResponse.split(/\r?\n/);
 
   for (const line of lines) {
-    const trimmedLine = line.trim();
+    const trimmedLine =
+      line.trim();
 
-    if (!trimmedLine.startsWith("data:")) {
+    if (
+      !trimmedLine.startsWith("data:")
+    ) {
       continue;
     }
 
@@ -552,25 +736,22 @@ function parseEventStreamResponse(rawResponse) {
     let eventData;
 
     try {
-      eventData = JSON.parse(payload);
+      eventData =
+        JSON.parse(payload);
     } catch {
       continue;
     }
 
-    const deltaContent =
-      eventData?.choices?.[0]?.delta?.content;
-
-    const messageContent =
-      eventData?.choices?.[0]?.message?.content;
-
     appendContentParts(
       textParts,
-      deltaContent
+      eventData?.choices?.[0]
+        ?.delta?.content
     );
 
     appendContentParts(
       textParts,
-      messageContent
+      eventData?.choices?.[0]
+        ?.message?.content
     );
   }
 
@@ -584,7 +765,8 @@ function parseEventStreamResponse(rawResponse) {
     choices: [
       {
         message: {
-          content: textParts.join("")
+          content:
+            textParts.join("")
         }
       }
     ]
@@ -619,12 +801,12 @@ function appendContentParts(
   }
 }
 
-/*
- * Extract the translation from an OpenAI-compatible response.
- */
-function extractChatCompletionText(data) {
+function extractChatCompletionText(
+  data
+) {
   const content =
-    data?.choices?.[0]?.message?.content;
+    data?.choices?.[0]
+      ?.message?.content;
 
   if (typeof content === "string") {
     return content;
@@ -664,9 +846,6 @@ function extractChatCompletionText(data) {
   return "";
 }
 
-/*
- * Create user-friendly API errors.
- */
 function createApiError(
   status,
   data,
@@ -688,22 +867,22 @@ function createApiError(
   ) {
     return new Error(
       `TAMU AI rejected the request for "${model}". ` +
-      "The model may not support image input or the gateway may " +
-      `require a different format. Details: ${readableMessage}`
+      "The model may not support image input. " +
+      `Details: ${readableMessage}`
     );
   }
 
   if (status === 401) {
     return new Error(
       "TAMU AI rejected the API key. " +
-      "Enter a valid, active API key."
+      "Enter a valid, active key."
     );
   }
 
   if (status === 403) {
     return new Error(
-      "TAMU AI denied access. Check your API key and model " +
-      `permissions. Details: ${readableMessage}`
+      "TAMU AI denied access. Check your key and model permissions. " +
+      `Details: ${readableMessage}`
     );
   }
 
@@ -716,15 +895,14 @@ function createApiError(
 
   if (status === 413) {
     return new Error(
-      "The selected screenshot was too large. " +
-      "Select a smaller area."
+      "The selected screenshot was too large. Select a smaller area."
     );
   }
 
   if (status === 429) {
     return new Error(
-      "The TAMU AI request limit was reached. " +
-      `Wait and try again. Details: ${readableMessage}`
+      "The TAMU AI request limit was reached. Wait and try again. " +
+      `Details: ${readableMessage}`
     );
   }
 
@@ -752,9 +930,6 @@ function stringifyError(value) {
   }
 }
 
-/*
- * Send a message without allowing a closed tab to create another error.
- */
 async function sendMessageSafely(
   tabId,
   message
