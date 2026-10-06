@@ -1,55 +1,74 @@
 (() => {
-  if (window.__tamuOcrTranslatorLoaded) {
-    return;
-  }
+  const IDS = {
+    selectionOverlay:
+      "__tamu_ocr_selection_overlay",
 
-  window.__tamuOcrTranslatorLoaded = true;
+    selectionBox:
+      "__tamu_ocr_selection_box",
 
-const IDS = {
-  selectionOverlay:
-    "__tamu_ocr_selection_overlay",
+    resultPanel:
+      "__tamu_ocr_result_panel",
 
-  selectionBox:
-    "__tamu_ocr_selection_box",
+    imageModal:
+      "__tamu_ocr_image_modal",
 
-  resultPanel:
-    "__tamu_ocr_result_panel",
+    translationProgress:
+      "__tamu_ocr_translation_progress"
+  };
 
-  imageModal:
-    "__tamu_ocr_image_modal",
-
-  translationProgress:
-    "__tamu_ocr_translation_progress"
-};
- 
   const PANEL_GEOMETRY_KEY =
-  "translationPanelGeometry";
+    "translationPanelGeometry";
 
-let cachedPanelGeometry = null;
+  let cachedPanelGeometry = null;
 
-/*
- * Preload the saved position and size.
- */
-chrome.storage.local
-  .get([PANEL_GEOMETRY_KEY])
-  .then((storedData) => {
-    const geometry =
-      storedData[PANEL_GEOMETRY_KEY];
+  /*
+   * Load saved size and location in advance.
+   */
+  chrome.storage.local
+    .get([
+      PANEL_GEOMETRY_KEY
+    ])
+    .then((stored) => {
+      const geometry =
+        stored[PANEL_GEOMETRY_KEY];
 
-    if (isValidPanelGeometry(geometry)) {
-      cachedPanelGeometry = geometry;
-    }
-  })
-  .catch((error) => {
-    console.warn(
-      "Could not load the saved panel geometry:",
-      error
-    );
-  });
+      if (
+        isValidPanelGeometry(
+          geometry
+        )
+      ) {
+        cachedPanelGeometry =
+          geometry;
+      }
+    })
+    .catch((error) => {
+      console.warn(
+        "Could not preload panel geometry:",
+        error
+      );
+    });
 
   chrome.runtime.onMessage.addListener(
     (message, sender, sendResponse) => {
-      if (message.type === "OCR_START_SELECTION") {
+      if (
+        !message ||
+        typeof message.type !== "string"
+      ) {
+        return false;
+      }
+
+      if (message.type === "OCR_PING") {
+        sendResponse({
+          ok: true
+        });
+
+        return;
+      }
+
+      if (
+        message.type ===
+        "OCR_START_SELECTION"
+      ) {
         startSelection();
 
         sendResponse({
@@ -58,38 +77,37 @@ chrome.storage.local
 
         return;
       }
+
       if (
-  message.type ===
-  "OCR_RESET_HISTORY_UI"
-) {
-  /*
-   * Forget the previously loaded size and position in this tab.
-   */
-  cachedPanelGeometry = null;
+        message.type ===
+        "OCR_RESET_HISTORY_UI"
+      ) {
+        cachedPanelGeometry = null;
 
-  /*
-   * Close the existing history panel and enlarged-image overlay.
-   */
-  removeElement(
-    IDS.resultPanel
-  );
+        removeElement(
+          IDS.resultPanel
+        );
 
-  removeImageModal();
+        removeImageModal();
 
-  sendResponse({
-    ok: true
-  });
+        sendResponse({
+          ok: true
+        });
 
-  return;
-}
+        return;
+      }
 
-      if (message.type === "OCR_CROP_SCREENSHOT") {
+      if (
+        message.type ===
+        "OCR_CROP_SCREENSHOT"
+      ) {
         cropScreenshot(
           message.screenshotDataUrl,
           message.selection
         )
           .then(async (imageDataUrl) => {
-            let historyImageDataUrl = "";
+            let historyImageDataUrl =
+              "";
 
             try {
               historyImageDataUrl =
@@ -121,31 +139,24 @@ chrome.storage.local
         return true;
       }
 
-if (message.type === "OCR_SHOW_STATUS") {
-  showTranslationProgress({
-    message:
-      message.message ||
-      "Translating...",
+      /*
+       * Progress is shown as a temporary card below existing history.
+       */
+      if (
+        message.type ===
+        "OCR_SHOW_STATUS"
+      ) {
+        showTranslationProgress({
+          message:
+            message.message ||
+            "Translating...",
 
-    history:
-      Array.isArray(message.history)
-        ? message.history
-        : []
-  });
-  
-
-  sendResponse({
-    ok: true
-  });
-
-  return;
-}
-
-      if (message.type === "OCR_SHOW_RESULT") {
-        showResultPanel({
-          text: message.text,
-          error: message.error,
-          history: message.history
+          history:
+            Array.isArray(
+              message.history
+            )
+              ? message.history
+              : []
         });
 
         sendResponse({
@@ -155,18 +166,67 @@ if (message.type === "OCR_SHOW_STATUS") {
         return;
       }
 
-      if (message.type === "OCR_SHOW_HISTORY") {
+      /*
+       * A successful result rebuilds history and replaces the temporary
+       * progress card with the newest translation.
+       */
+      if (
+        message.type ===
+        "OCR_SHOW_RESULT"
+      ) {
+        if (message.error) {
+          showTranslationProgress({
+            message: message.error,
+            history:
+              Array.isArray(
+                message.history
+              )
+                ? message.history
+                : [],
+            isError: true
+          });
+        } else {
+          showResultPanel({
+            text: message.text,
+            history:
+              Array.isArray(
+                message.history
+              )
+                ? message.history
+                : [],
+            scrollToNewest: true
+          });
+        }
+
+        sendResponse({
+          ok: true
+        });
+
+        return;
+      }
+
+      if (
+        message.type ===
+        "OCR_SHOW_HISTORY"
+      ) {
         showResultPanel({
           history:
-            Array.isArray(message.history)
+            Array.isArray(
+              message.history
+            )
               ? message.history
-              : []
+              : [],
+          scrollToNewest: true
         });
 
         sendResponse({
           ok: true
         });
+
+        return;
       }
+
+      return false;
     }
   );
 
@@ -293,7 +353,9 @@ if (message.type === "OCR_SHOW_STATUS") {
           event.pointerId
         );
       } catch {
-        // Pointer capture is optional.
+        /*
+         * Pointer capture is optional.
+         */
       }
     };
 
@@ -365,9 +427,11 @@ if (message.type === "OCR_SHOW_STATUS") {
         width < 8 ||
         height < 8
       ) {
-        showResultPanel({
-          error:
-            "The selected area was too small. Please try again."
+        showTranslationProgress({
+          message:
+            "The selected area was too small. Please try again.",
+          history: [],
+          isError: true
         });
 
         return;
@@ -508,6 +572,9 @@ if (message.type === "OCR_SHOW_STATUS") {
         screenshotDataUrl
       );
 
+    /*
+     * Retina displays can use more screenshot pixels than CSS pixels.
+     */
     const scaleX =
       image.naturalWidth /
       selection.viewportWidth;
@@ -706,11 +773,10 @@ if (message.type === "OCR_SHOW_STATUS") {
   }
 
   function showResultPanel({
-    status,
     text,
-    error,
-    history = []
-  }) {
+    history = [],
+    scrollToNewest = true
+  } = {}) {
     removeElement(
       IDS.resultPanel
     );
@@ -724,11 +790,9 @@ if (message.type === "OCR_SHOW_STATUS") {
 
     panel.id =
       IDS.resultPanel;
-    /*
- * Prevent the ResizeObserver from saving the default size before the
- * previously saved geometry has been restored.
- */
-panel.__tamuGeometryReady = false;
+
+    panel.__tamuGeometryReady =
+      false;
 
     Object.assign(panel.style, {
       position: "fixed",
@@ -791,16 +855,8 @@ panel.__tamuGeometryReady = false;
         "strong"
       );
 
-    if (error) {
-      title.textContent =
-        "Translation error";
-    } else if (status) {
-      title.textContent =
-        "TAMU OCR Translator";
-    } else {
-      title.textContent =
-        "Translation history";
-    }
+    title.textContent =
+      "Translation history";
 
     Object.assign(title.style, {
       paddingRight: "42px",
@@ -825,6 +881,9 @@ panel.__tamuGeometryReady = false;
       "Close translation history"
     );
 
+    /*
+     * This stays pinned because only scrollingBody scrolls.
+     */
     Object.assign(
       closeButton.style,
       {
@@ -856,8 +915,14 @@ panel.__tamuGeometryReady = false;
       "click",
       (event) => {
         event.stopPropagation();
+
+        savePanelGeometry(panel);
+
         removeImageModal();
-        panel.remove();
+
+        removeElement(
+          IDS.resultPanel
+        );
       }
     );
 
@@ -870,9 +935,9 @@ panel.__tamuGeometryReady = false;
       document.createElement(
         "div"
       );
-    
+
     scrollingBody.dataset.tamuHistoryScroll =
-  "true";
+      "true";
 
     Object.assign(
       scrollingBody.style,
@@ -902,605 +967,545 @@ panel.__tamuGeometryReady = false;
       panel
     );
 
-    if (error || status) {
-      const message =
+    const orderedHistory =
+      getOrderedHistory(
+        history,
+        text
+      );
+
+    if (
+      orderedHistory.length === 0
+    ) {
+      const emptyMessage =
         document.createElement(
           "div"
         );
 
-      message.textContent =
-        error || status;
+      emptyMessage.dataset.tamuEmptyHistory =
+        "true";
+
+      emptyMessage.textContent =
+        "No translation history yet.";
 
       Object.assign(
-        message.style,
+        emptyMessage.style,
         {
-          padding: "4px 0",
-          color: error
-            ? "#fca5a5"
-            : "#93c5fd",
-          whiteSpace: "pre-wrap",
-          overflowWrap: "anywhere",
+          padding: "16px 4px",
+          color: "#94a3b8",
+          textAlign: "center",
           fontSize: "1em",
           lineHeight: "1.5"
         }
       );
 
       scrollingBody.appendChild(
-        message
+        emptyMessage
       );
-
-      if (error) {
-        const tryAgainButton =
-          createButton(
-            "Try again",
-            "#2563eb"
-          );
-
-        tryAgainButton.style.width =
-          "100%";
-
-        tryAgainButton.style.marginTop =
-          "14px";
-
-        tryAgainButton.addEventListener(
-          "click",
-          () => {
-            panel.remove();
-            startSelection();
-          }
-        );
-
-        scrollingBody.appendChild(
-          tryAgainButton
-        );
-      }
     } else {
-      const orderedHistory =
-        getOrderedHistory(
-          history,
-          text
-        );
-
-      if (
-        orderedHistory.length === 0
-      ) {
-        const emptyMessage =
-          document.createElement(
-            "div"
-          );
-
-        emptyMessage.textContent =
-          "No translation history yet.";
-        emptyMessage.dataset.tamuEmptyHistory =
-  "true";
-
-        Object.assign(
-          emptyMessage.style,
-          {
-            padding: "16px 4px",
-            color: "#94a3b8",
-            textAlign: "center",
-            fontSize: "1em",
-            lineHeight: "1.5"
-          }
-        );
-
-        scrollingBody.appendChild(
-          emptyMessage
-        );
-      } else {
-        const historyContainer =
-          document.createElement(
-            "div"
-          );
-
-        Object.assign(
-          historyContainer.style,
-          {
-            display: "flex",
-            flexDirection: "column",
-            gap: "1em"
-          }
-        );
-
-        orderedHistory.forEach(
-          (entry, index) => {
-            const wrapper =
-              document.createElement(
-                "div"
-              );
-
-            const isNewest =
-              index ===
-              orderedHistory.length - 1;
-
-            const label =
-              document.createElement(
-                "div"
-              );
-
-            if (isNewest) {
-              label.textContent =
-                "Newest translation";
-            } else if (
-              index === 0
-            ) {
-              label.textContent =
-                "Oldest translation";
-            } else {
-              label.textContent =
-                "Previous translation";
-            }
-
-            Object.assign(
-              label.style,
-              {
-                margin:
-                  "0 0 0.4em",
-                color: isNewest
-                  ? "#93c5fd"
-                  : "#94a3b8",
-                fontSize: "0.72em",
-                fontWeight: "700",
-                lineHeight: "1.2",
-                textTransform:
-                  "uppercase",
-                letterSpacing:
-                  "0.04em"
-              }
-            );
-
-            const historyItem =
-              createHistoryItem(
-                entry
-              );
-
-            if (isNewest) {
-              Object.assign(
-                historyItem.style,
-                {
-                  borderColor:
-                    "rgba(96, 165, 250, 0.75)",
-                  boxShadow:
-                    "0 0 0 1px rgba(96, 165, 250, 0.12)"
-                }
-              );
-            }
-
-            wrapper.append(
-              label,
-              historyItem
-            );
-
-            historyContainer.appendChild(
-              wrapper
-            );
-          }
-        );
-
-        scrollingBody.appendChild(
-          historyContainer
-        );
-      }
-
-      const actions =
+      const historyContainer =
         document.createElement(
           "div"
         );
-      actions.dataset.tamuHistoryActions =
-  "true";
+
+      historyContainer.dataset.tamuHistoryList =
+        "true";
 
       Object.assign(
-        actions.style,
+        historyContainer.style,
         {
-          position: "sticky",
-          bottom: "-14px",
-          zIndex: "10",
           display: "flex",
-          gap: "0.6em",
-          marginTop: "1em",
-          padding:
-            "0.9em 0 0.2em",
-          background: "#111827"
+          flexDirection: "column",
+          gap: "1em"
         }
       );
 
-      const newTranslationButton =
-        createButton(
-          "New translation",
-          "#374151"
-        );
-
-      const copyButton =
-        createButton(
-          "Copy translation",
-          "#2563eb"
-        );
-
-      newTranslationButton.style.flex =
-        "1";
-
-      copyButton.style.flex =
-        "1";
-
-      newTranslationButton.addEventListener(
-        "click",
-        () => {
-          removeImageModal();
-          panel.remove();
-          startSelection();
-        }
-      );
-
-      copyButton.addEventListener(
-        "click",
-        async () => {
-          const orderedHistory =
-            getOrderedHistory(
-              history,
-              text
+      orderedHistory.forEach(
+        (entry, index) => {
+          const wrapper =
+            document.createElement(
+              "div"
             );
 
-          const newestEntry =
-            orderedHistory[
-              orderedHistory.length - 1
-            ];
+          const isNewest =
+            index ===
+            orderedHistory.length - 1;
 
-          await copyTextWithFeedback(
-            newestEntry?.text ||
-              text ||
-              "",
-            copyButton,
-            "Copy translation"
+          const label =
+            document.createElement(
+              "div"
+            );
+
+          if (isNewest) {
+            label.textContent =
+              "Newest translation";
+          } else if (
+            index === 0
+          ) {
+            label.textContent =
+              "Oldest translation";
+          } else {
+            label.textContent =
+              "Previous translation";
+          }
+
+          Object.assign(
+            label.style,
+            {
+              margin:
+                "0 0 0.4em",
+              color: isNewest
+                ? "#93c5fd"
+                : "#94a3b8",
+              fontSize: "0.72em",
+              fontWeight: "700",
+              lineHeight: "1.2",
+              textTransform:
+                "uppercase",
+              letterSpacing:
+                "0.04em"
+            }
+          );
+
+          const historyItem =
+            createHistoryItem(
+              entry
+            );
+
+          if (isNewest) {
+            Object.assign(
+              historyItem.style,
+              {
+                borderColor:
+                  "rgba(96, 165, 250, 0.75)",
+                boxShadow:
+                  "0 0 0 1px rgba(96, 165, 250, 0.12)"
+              }
+            );
+          }
+
+          wrapper.append(
+            label,
+            historyItem
+          );
+
+          historyContainer.appendChild(
+            wrapper
           );
         }
       );
 
-      actions.append(
-        newTranslationButton,
-        copyButton
-      );
-
       scrollingBody.appendChild(
-        actions
+        historyContainer
       );
     }
 
-document.documentElement.appendChild(
-  panel
-);
+    const actions =
+      document.createElement(
+        "div"
+      );
 
-/*
- * Restore the user-selected size and position whenever the panel
- * reopens after a new translation.
- */
-restorePanelGeometry(panel)
-  .catch((restoreError) => {
-    console.warn(
-      "Could not restore panel geometry:",
-      restoreError
+    actions.dataset.tamuHistoryActions =
+      "true";
+
+    Object.assign(
+      actions.style,
+      {
+        position: "sticky",
+        bottom: "-14px",
+        zIndex: "10",
+        display: "flex",
+        gap: "0.6em",
+        marginTop: "1em",
+        padding:
+          "0.9em 0 0.2em",
+        background: "#111827"
+      }
     );
-  })
-  .finally(() => {
-    keepPanelOnScreen(panel);
 
-    panel.__tamuGeometryReady = true;
+    const newTranslationButton =
+      createButton(
+        "New translation",
+        "#374151"
+      );
+
+    const copyButton =
+      createButton(
+        "Copy translation",
+        "#2563eb"
+      );
+
+    newTranslationButton.style.flex =
+      "1";
+
+    copyButton.style.flex =
+      "1";
+
+    newTranslationButton.addEventListener(
+      "click",
+      () => {
+        savePanelGeometry(panel);
+
+        removeImageModal();
+
+        removeElement(
+          IDS.resultPanel
+        );
+
+        startSelection();
+      }
+    );
+
+    copyButton.addEventListener(
+      "click",
+      async () => {
+        const newestEntry =
+          orderedHistory[
+            orderedHistory.length - 1
+          ];
+
+        await copyTextWithFeedback(
+          newestEntry?.text ||
+            text ||
+            "",
+          copyButton,
+          "Copy translation"
+        );
+      }
+    );
+
+    actions.append(
+      newTranslationButton,
+      copyButton
+    );
+
+    scrollingBody.appendChild(
+      actions
+    );
+
+    document.documentElement.appendChild(
+      panel
+    );
+
+    restorePanelGeometry(panel)
+      .catch((error) => {
+        console.warn(
+          "Could not restore panel geometry:",
+          error
+        );
+      })
+      .finally(() => {
+        if (!panel.isConnected) {
+          return;
+        }
+
+        keepPanelOnScreen(panel);
+
+        panel.__tamuGeometryReady =
+          true;
+
+        schedulePanelGeometrySave(
+          panel
+        );
+
+        if (scrollToNewest) {
+          scrollToNewestTranslation(
+            scrollingBody
+          );
+        }
+      });
+  }
+
+  function showTranslationProgress({
+    message = "Translating...",
+    history = [],
+    isError = false
+  } = {}) {
+    let panel =
+      document.getElementById(
+        IDS.resultPanel
+      );
 
     /*
-     * Save again in case the viewport changed and keepPanelOnScreen()
-     * had to adjust the saved position.
+     * If no history panel is open, create it with the previous history.
      */
-    schedulePanelGeometrySave(panel);
+    if (!panel) {
+      showResultPanel({
+        history,
+        scrollToNewest: false
+      });
 
-    if (!error && !status) {
+      panel =
+        document.getElementById(
+          IDS.resultPanel
+        );
+    }
+
+    if (!panel) {
+      console.error(
+        "Could not create translation history panel."
+      );
+
+      return;
+    }
+
+    const scrollingBody =
+      panel.querySelector(
+        '[data-tamu-history-scroll="true"]'
+      );
+
+    if (!scrollingBody) {
+      console.error(
+        "Could not find the history scroll area."
+      );
+
+      return;
+    }
+
+    scrollingBody
+      .querySelector(
+        '[data-tamu-empty-history="true"]'
+      )
+      ?.remove();
+
+    const actions =
+      scrollingBody.querySelector(
+        '[data-tamu-history-actions="true"]'
+      );
+
+    let progressWrapper =
+      document.getElementById(
+        IDS.translationProgress
+      );
+
+    /*
+     * Update the existing progress card if this is the second status.
+     */
+    if (progressWrapper) {
+      const progressMessage =
+        progressWrapper.querySelector(
+          '[data-tamu-progress-message="true"]'
+        );
+
+      const progressIcon =
+        progressWrapper.querySelector(
+          '[data-tamu-progress-icon="true"]'
+        );
+
+      const progressCard =
+        progressWrapper.querySelector(
+          '[data-tamu-progress-card="true"]'
+        );
+
+      const progressLabel =
+        progressWrapper.querySelector(
+          '[data-tamu-progress-label="true"]'
+        );
+
+      if (progressMessage) {
+        progressMessage.textContent =
+          message;
+      }
+
+      if (isError) {
+        if (progressIcon) {
+          progressIcon.textContent =
+            "⚠️";
+        }
+
+        if (progressMessage) {
+          progressMessage.style.color =
+            "#fca5a5";
+        }
+
+        if (progressCard) {
+          progressCard.style.borderColor =
+            "rgba(248, 113, 113, 0.8)";
+        }
+
+        if (progressLabel) {
+          progressLabel.textContent =
+            "Translation failed";
+
+          progressLabel.style.color =
+            "#fca5a5";
+        }
+
+        if (actions) {
+          actions.style.display =
+            "flex";
+        }
+      }
+
       scrollToNewestTranslation(
         scrollingBody
       );
-    }
-  });
-  }
-function scrollToNewestTranslation(
-  scrollingBody
-) {
-  if (!scrollingBody) {
-    return;
-  }
 
-  const scrollToBottom = (
-    behavior = "auto"
-  ) => {
-    if (!scrollingBody.isConnected) {
       return;
     }
 
-    scrollingBody.scrollTo({
-      top:
-        scrollingBody.scrollHeight,
-      behavior
-    });
-  };
-
-  requestAnimationFrame(() => {
-    scrollToBottom("auto");
-
-    requestAnimationFrame(() => {
-      scrollToBottom("smooth");
-    });
-  });
-
-  /*
-   * History screenshots can finish loading after layout, so repeat the
-   * scroll to keep the progress card or newest translation visible.
-   */
-  setTimeout(() => {
-    scrollToBottom("smooth");
-  }, 150);
-
-  setTimeout(() => {
-    scrollToBottom("smooth");
-  }, 500);
-}
-  const scrollToBottom = (
-    behavior = "auto"
-  ) => {
-    if (!scrollingBody.isConnected) {
-      return;
+    if (actions) {
+      actions.style.display =
+        isError
+          ? "flex"
+          : "none";
     }
 
-    scrollingBody.scrollTo({
-      top: scrollingBody.scrollHeight,
-      behavior
-    });
-  };
+    progressWrapper =
+      document.createElement("div");
 
-  /*
-   * First scroll immediately after the panel is rendered.
-   */
-  requestAnimationFrame(() => {
-    scrollToBottom("auto");
+    progressWrapper.id =
+      IDS.translationProgress;
+
+    progressWrapper.setAttribute(
+      "role",
+      "status"
+    );
+
+    progressWrapper.setAttribute(
+      "aria-live",
+      "polite"
+    );
+
+    Object.assign(
+      progressWrapper.style,
+      {
+        marginTop: "1em"
+      }
+    );
+
+    const progressLabel =
+      document.createElement("div");
+
+    progressLabel.dataset.tamuProgressLabel =
+      "true";
+
+    progressLabel.textContent =
+      isError
+        ? "Translation failed"
+        : "New translation";
+
+    Object.assign(
+      progressLabel.style,
+      {
+        margin: "0 0 0.4em",
+        color: isError
+          ? "#fca5a5"
+          : "#93c5fd",
+        fontSize: "0.72em",
+        fontWeight: "700",
+        lineHeight: "1.2",
+        textTransform: "uppercase",
+        letterSpacing: "0.04em"
+      }
+    );
+
+    const progressCard =
+      document.createElement(
+        "article"
+      );
+
+    progressCard.dataset.tamuProgressCard =
+      "true";
+
+    Object.assign(
+      progressCard.style,
+      {
+        display: "flex",
+        alignItems: "center",
+        gap: "0.8em",
+        minHeight: "4.5em",
+        boxSizing: "border-box",
+        padding: "0.9em",
+        border:
+          isError
+            ? "1px solid rgba(248, 113, 113, 0.8)"
+            : "1px solid rgba(96, 165, 250, 0.75)",
+        borderRadius: "0.6em",
+        background: "#1f2937",
+        boxShadow:
+          "0 0 0 1px rgba(96, 165, 250, 0.12)"
+      }
+    );
+
+    const progressIcon =
+      document.createElement("span");
+
+    progressIcon.dataset.tamuProgressIcon =
+      "true";
+
+    progressIcon.textContent =
+      isError
+        ? "⚠️"
+        : "⏳";
+
+    progressIcon.setAttribute(
+      "aria-hidden",
+      "true"
+    );
+
+    Object.assign(
+      progressIcon.style,
+      {
+        flex: "0 0 auto",
+        fontSize: "1.35em",
+        lineHeight: "1"
+      }
+    );
+
+    const progressMessage =
+      document.createElement("div");
+
+    progressMessage.dataset.tamuProgressMessage =
+      "true";
+
+    progressMessage.textContent =
+      message;
+
+    Object.assign(
+      progressMessage.style,
+      {
+        flex: "1 1 auto",
+        minWidth: "0",
+        color: isError
+          ? "#fca5a5"
+          : "#bfdbfe",
+        fontSize: "1em",
+        fontWeight: "600",
+        lineHeight: "1.5",
+        whiteSpace: "pre-wrap",
+        overflowWrap: "anywhere"
+      }
+    );
+
+    progressCard.append(
+      progressIcon,
+      progressMessage
+    );
+
+    progressWrapper.append(
+      progressLabel,
+      progressCard
+    );
 
     /*
-     * Scroll again after the browser completes another layout pass.
+     * Place progress after history and before the sticky action buttons.
      */
-    requestAnimationFrame(() => {
-      scrollToBottom("smooth");
-    });
-  });
-
-  /*
-   * Screenshot previews can increase the history height after loading.
-   * Repeat the scroll so the newest translation remains visible.
-   */
-  setTimeout(() => {
-    scrollToBottom("smooth");
-  }, 150);
-
-  setTimeout(() => {
-    scrollToBottom("smooth");
-  }, 500);
-
-  setTimeout(() => {
-    scrollToBottom("smooth");
-  }, 1000);
-}
-  function showTranslationProgress({
-  message,
-  history = []
-}) {
-  /*
-   * If the progress card is already visible, update only its message.
-   * This prevents the history panel from being rebuilt for every status
-   * update.
-   */
-  const existingProgress =
-    document.getElementById(
-      IDS.translationProgress
-    );
-
-  if (existingProgress) {
-    const existingMessage =
-      existingProgress.querySelector(
-        '[data-tamu-progress-message="true"]'
+    if (actions) {
+      scrollingBody.insertBefore(
+        progressWrapper,
+        actions
       );
-
-    if (existingMessage) {
-      existingMessage.textContent =
-        message || "Translating...";
-    }
-
-    const existingBody =
-      document
-        .getElementById(
-          IDS.resultPanel
-        )
-        ?.querySelector(
-          '[data-tamu-history-scroll="true"]'
-        );
-
-    if (existingBody) {
-      scrollToNewestTranslation(
-        existingBody
+    } else {
+      scrollingBody.appendChild(
+        progressWrapper
       );
     }
 
-    return;
-  }
-
-  /*
-   * Render the existing translations first. This creates the normal
-   * draggable and resizable history panel.
-   */
-  showResultPanel({
-    history
-  });
-
-  const panel =
-    document.getElementById(
-      IDS.resultPanel
+    scrollToNewestTranslation(
+      scrollingBody
     );
-
-  if (!panel) {
-    return;
   }
 
-  const scrollingBody =
-    panel.querySelector(
-      '[data-tamu-history-scroll="true"]'
-    );
-
-  if (!scrollingBody) {
-    return;
-  }
-
-  /*
-   * Remove the empty-history message when processing the first
-   * translation.
-   */
-  scrollingBody
-    .querySelector(
-      '[data-tamu-empty-history="true"]'
-    )
-    ?.remove();
-
-  /*
-   * Hide the normal action buttons until the translation finishes.
-   * The final OCR_SHOW_RESULT message rebuilds the panel and restores them.
-   */
-  const actions =
-    scrollingBody.querySelector(
-      '[data-tamu-history-actions="true"]'
-    );
-
-  if (actions) {
-    actions.style.display = "none";
-  }
-
-  const progressWrapper =
-    document.createElement("div");
-
-  progressWrapper.id =
-    IDS.translationProgress;
-
-  progressWrapper.setAttribute(
-    "role",
-    "status"
-  );
-
-  progressWrapper.setAttribute(
-    "aria-live",
-    "polite"
-  );
-
-  Object.assign(
-    progressWrapper.style,
-    {
-      marginTop: "1em"
-    }
-  );
-
-  const progressLabel =
-    document.createElement("div");
-
-  progressLabel.textContent =
-    "New translation";
-
-  Object.assign(
-    progressLabel.style,
-    {
-      margin: "0 0 0.4em",
-      color: "#93c5fd",
-      fontSize: "0.72em",
-      fontWeight: "700",
-      lineHeight: "1.2",
-      textTransform: "uppercase",
-      letterSpacing: "0.04em"
-    }
-  );
-
-  const progressCard =
-    document.createElement("article");
-
-  Object.assign(
-    progressCard.style,
-    {
-      display: "flex",
-      alignItems: "center",
-      gap: "0.8em",
-      minHeight: "4.5em",
-      padding: "0.9em",
-      border:
-        "1px solid rgba(96, 165, 250, 0.75)",
-      borderRadius: "0.6em",
-      background: "#1f2937",
-      boxShadow:
-        "0 0 0 1px rgba(96, 165, 250, 0.12)"
-    }
-  );
-
-  const progressIcon =
-    document.createElement("div");
-
-  progressIcon.textContent = "⏳";
-
-  progressIcon.setAttribute(
-    "aria-hidden",
-    "true"
-  );
-
-  Object.assign(
-    progressIcon.style,
-    {
-      flex: "0 0 auto",
-      fontSize: "1.4em",
-      lineHeight: "1"
-    }
-  );
-
-  const progressText =
-    document.createElement("div");
-
-  progressText.dataset.tamuProgressMessage =
-    "true";
-
-  progressText.textContent =
-    message || "Translating...";
-
-  Object.assign(
-    progressText.style,
-    {
-      flex: "1 1 auto",
-      minWidth: "0",
-      color: "#bfdbfe",
-      fontSize: "1em",
-      fontWeight: "600",
-      lineHeight: "1.5",
-      whiteSpace: "pre-wrap",
-      overflowWrap: "anywhere"
-    }
-  );
-
-  progressCard.append(
-    progressIcon,
-    progressText
-  );
-
-  progressWrapper.append(
-    progressLabel,
-    progressCard
-  );
-
-  /*
-   * The progress card is appended after all existing translations, so it
-   * always appears at the bottom.
-   */
-  scrollingBody.appendChild(
-    progressWrapper
-  );
-
-  scrollToNewestTranslation(
-    scrollingBody
-  );
-}
   function createHistoryItem(entry) {
     const item =
       document.createElement(
@@ -1608,7 +1613,7 @@ function scrollToNewestTranslation(
     Object.assign(
       itemText.style,
       {
-        flex: "1 1 80%",
+        flex: "1 1 78%",
         minWidth: "0",
         maxHeight: "18em",
         overflow: "auto",
@@ -1653,7 +1658,7 @@ function scrollToNewestTranslation(
         previewButton.style,
         {
           position: "relative",
-          flex: "0 0 18%",
+          flex: "0 0 20%",
           minWidth: "5.5em",
           minHeight: "5em",
           alignSelf: "stretch",
@@ -1674,22 +1679,6 @@ function scrollToNewestTranslation(
 
       previewImage.src =
         entry.imageDataUrl;
-      previewImage.addEventListener(
-  "load",
-  () => {
-    const scrollingBody =
-      document.getElementById(
-        IDS.resultPanel
-      )?.querySelector(
-        '[data-tamu-history-scroll="true"]'
-      );
-
-    if (scrollingBody) {
-      scrollingBody.scrollTop =
-        scrollingBody.scrollHeight;
-    }
-  }
-);
 
       previewImage.alt =
         "Screenshot used for this translation";
@@ -1734,359 +1723,429 @@ function scrollToNewestTranslation(
     return item;
   }
 
-function makePanelDraggable(
-  panel,
-  handle,
-  ignoredElement
-) {
-  let dragging = false;
-  let offsetX = 0;
-  let offsetY = 0;
+  function makePanelDraggable(
+    panel,
+    handle,
+    ignoredElement
+  ) {
+    let dragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
 
-  const onPointerDown = (event) => {
+    const onPointerDown = (
+      event
+    ) => {
+      if (
+        event.button !== 0 ||
+        event.target ===
+          ignoredElement ||
+        ignoredElement.contains(
+          event.target
+        )
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const rectangle =
+        panel.getBoundingClientRect();
+
+      panel.style.left =
+        `${rectangle.left}px`;
+
+      panel.style.top =
+        `${rectangle.top}px`;
+
+      panel.style.right =
+        "auto";
+
+      dragging = true;
+
+      offsetX =
+        event.clientX -
+        rectangle.left;
+
+      offsetY =
+        event.clientY -
+        rectangle.top;
+
+      try {
+        handle.setPointerCapture(
+          event.pointerId
+        );
+      } catch {
+        /*
+         * Pointer capture is optional.
+         */
+      }
+    };
+
+    const onPointerMove = (
+      event
+    ) => {
+      if (!dragging) {
+        return;
+      }
+
+      const maximumLeft =
+        Math.max(
+          0,
+          window.innerWidth -
+          panel.offsetWidth
+        );
+
+      const maximumTop =
+        Math.max(
+          0,
+          window.innerHeight -
+          panel.offsetHeight
+        );
+
+      const left = Math.min(
+        maximumLeft,
+        Math.max(
+          0,
+          event.clientX -
+          offsetX
+        )
+      );
+
+      const top = Math.min(
+        maximumTop,
+        Math.max(
+          0,
+          event.clientY -
+          offsetY
+        )
+      );
+
+      panel.style.left =
+        `${left}px`;
+
+      panel.style.top =
+        `${top}px`;
+
+      panel.style.right =
+        "auto";
+    };
+
+    const stopDragging = () => {
+      if (!dragging) {
+        return;
+      }
+
+      dragging = false;
+
+      savePanelGeometry(
+        panel
+      );
+    };
+
+    handle.addEventListener(
+      "pointerdown",
+      onPointerDown
+    );
+
+    document.addEventListener(
+      "pointermove",
+      onPointerMove,
+      true
+    );
+
+    document.addEventListener(
+      "pointerup",
+      stopDragging,
+      true
+    );
+
+    document.addEventListener(
+      "pointercancel",
+      stopDragging,
+      true
+    );
+
+    panel.__tamuDragCleanup = () => {
+      document.removeEventListener(
+        "pointermove",
+        onPointerMove,
+        true
+      );
+
+      document.removeEventListener(
+        "pointerup",
+        stopDragging,
+        true
+      );
+
+      document.removeEventListener(
+        "pointercancel",
+        stopDragging,
+        true
+      );
+    };
+  }
+
+  function makePanelContentResponsive(
+    panel
+  ) {
+    const updateScale = () => {
+      const width =
+        panel.getBoundingClientRect()
+          .width;
+
+      const scale = Math.min(
+        1.3,
+        Math.max(
+          0.78,
+          width / 520
+        )
+      );
+
+      panel.style.fontSize =
+        `${14 * scale}px`;
+    };
+
+    updateScale();
+
     if (
-      event.button !== 0 ||
-      event.target === ignoredElement ||
-      ignoredElement.contains(event.target)
+      typeof ResizeObserver ===
+      "function"
+    ) {
+      const observer =
+        new ResizeObserver(() => {
+          updateScale();
+
+          keepPanelOnScreen(
+            panel
+          );
+
+          if (
+            panel.__tamuGeometryReady
+          ) {
+            schedulePanelGeometrySave(
+              panel
+            );
+          }
+        });
+
+      observer.observe(panel);
+
+      panel.__tamuResizeObserver =
+        observer;
+    }
+  }
+
+  function isValidPanelGeometry(
+    geometry
+  ) {
+    return Boolean(
+      geometry &&
+      Number.isFinite(
+        geometry.left
+      ) &&
+      Number.isFinite(
+        geometry.top
+      ) &&
+      Number.isFinite(
+        geometry.width
+      ) &&
+      Number.isFinite(
+        geometry.height
+      ) &&
+      geometry.width > 0 &&
+      geometry.height > 0
+    );
+  }
+
+  async function restorePanelGeometry(
+    panel
+  ) {
+    let geometry =
+      cachedPanelGeometry;
+
+    try {
+      const stored =
+        await chrome.storage.local.get([
+          PANEL_GEOMETRY_KEY
+        ]);
+
+      const storedGeometry =
+        stored[PANEL_GEOMETRY_KEY];
+
+      if (
+        isValidPanelGeometry(
+          storedGeometry
+        )
+      ) {
+        geometry =
+          storedGeometry;
+
+        cachedPanelGeometry =
+          storedGeometry;
+      }
+    } catch (error) {
+      console.warn(
+        "Could not read panel geometry:",
+        error
+      );
+    }
+
+    if (
+      !panel.isConnected ||
+      !isValidPanelGeometry(
+        geometry
+      )
     ) {
       return;
     }
 
-    event.preventDefault();
-
-    const rectangle =
-      panel.getBoundingClientRect();
-
-    panel.style.left =
-      `${rectangle.left}px`;
-
-    panel.style.top =
-      `${rectangle.top}px`;
-
-    panel.style.right = "auto";
-
-    dragging = true;
-
-    offsetX =
-      event.clientX - rectangle.left;
-
-    offsetY =
-      event.clientY - rectangle.top;
-
-    try {
-      handle.setPointerCapture(
-        event.pointerId
+    const availableWidth =
+      Math.max(
+        320,
+        window.innerWidth - 12
       );
-    } catch {
-      // Pointer capture is optional.
-    }
-  };
 
-  const onPointerMove = (event) => {
-    if (!dragging) {
-      return;
-    }
+    const availableHeight =
+      Math.max(
+        220,
+        window.innerHeight - 12
+      );
 
-    const maximumLeft = Math.max(
-      0,
-      window.innerWidth -
-        panel.offsetWidth
+    const width = Math.min(
+      geometry.width,
+      availableWidth
     );
 
-    const maximumTop = Math.max(
-      0,
-      window.innerHeight -
-        panel.offsetHeight
+    const height = Math.min(
+      geometry.height,
+      availableHeight
     );
 
     const left = Math.min(
-      maximumLeft,
       Math.max(
         0,
-        event.clientX - offsetX
+        geometry.left
+      ),
+      Math.max(
+        0,
+        window.innerWidth - width
       )
     );
 
     const top = Math.min(
-      maximumTop,
       Math.max(
         0,
-        event.clientY - offsetY
+        geometry.top
+      ),
+      Math.max(
+        0,
+        window.innerHeight - height
       )
     );
 
-    panel.style.left = `${left}px`;
-    panel.style.top = `${top}px`;
-    panel.style.right = "auto";
-  };
+    panel.style.width =
+      `${width}px`;
 
-  const stopDragging = () => {
-    if (!dragging) {
+    panel.style.height =
+      `${height}px`;
+
+    panel.style.left =
+      `${left}px`;
+
+    panel.style.top =
+      `${top}px`;
+
+    panel.style.right =
+      "auto";
+  }
+
+  function schedulePanelGeometrySave(
+    panel
+  ) {
+    if (
+      !panel ||
+      !panel.isConnected ||
+      !panel.__tamuGeometryReady
+    ) {
       return;
     }
 
-    dragging = false;
-
-    /*
-     * Remember the position after the user finishes dragging.
-     */
-    savePanelGeometry(panel);
-  };
-
-  handle.addEventListener(
-    "pointerdown",
-    onPointerDown
-  );
-
-  handle.addEventListener(
-    "pointermove",
-    onPointerMove
-  );
-
-  handle.addEventListener(
-    "pointerup",
-    stopDragging
-  );
-
-  handle.addEventListener(
-    "pointercancel",
-    stopDragging
-  );
-
-  /*
-   * Handle pointer release outside the header.
-   */
-  document.addEventListener(
-    "pointerup",
-    stopDragging
-  );
-
-  panel.__tamuDragCleanup = () => {
-    document.removeEventListener(
-      "pointerup",
-      stopDragging
-    );
-  };
-}
-
-function makePanelContentResponsive(
-  panel
-) {
-  const updateScale = () => {
-    const width =
-      panel.getBoundingClientRect().width;
-
-    /*
-     * Scale the text as the panel width changes. Preview images already
-     * use percentages and scale automatically.
-     */
-    const scale = Math.min(
-      1.3,
-      Math.max(
-        0.78,
-        width / 520
-      )
+    clearTimeout(
+      panel.__tamuGeometrySaveTimer
     );
 
-    panel.style.fontSize =
-      `${14 * scale}px`;
-  };
-
-  updateScale();
-
-  if (
-    typeof ResizeObserver ===
-    "function"
-  ) {
-    const observer =
-      new ResizeObserver(() => {
-        updateScale();
-        keepPanelOnScreen(panel);
-
-        /*
-         * Remember the resized dimensions after resizing settles.
-         */
-        if (
-          panel.__tamuGeometryReady
-        ) {
-          schedulePanelGeometrySave(
-            panel
-          );
-        }
-      });
-
-    observer.observe(panel);
-
-    panel.__tamuResizeObserver =
-      observer;
+    panel.__tamuGeometrySaveTimer =
+      setTimeout(() => {
+        savePanelGeometry(
+          panel
+        );
+      }, 250);
   }
-}
-  function isValidPanelGeometry(
-  geometry
-) {
-  return Boolean(
-    geometry &&
-    Number.isFinite(geometry.left) &&
-    Number.isFinite(geometry.top) &&
-    Number.isFinite(geometry.width) &&
-    Number.isFinite(geometry.height) &&
-    geometry.width > 0 &&
-    geometry.height > 0
-  );
-}
 
-async function restorePanelGeometry(
-  panel
-) {
-  let geometry =
-    cachedPanelGeometry;
+  async function savePanelGeometry(
+    panel
+  ) {
+    if (!panel) {
+      return;
+    }
 
-  /*
-   * Read storage again in case another tab or panel instance changed it.
-   */
-  try {
-    const storedData =
-      await chrome.storage.local.get([
-        PANEL_GEOMETRY_KEY
-      ]);
+    const rectangle =
+      panel.getBoundingClientRect();
 
-    const storedGeometry =
-      storedData[PANEL_GEOMETRY_KEY];
+    const geometry = {
+      left:
+        Math.round(
+          rectangle.left
+        ),
+      top:
+        Math.round(
+          rectangle.top
+        ),
+      width:
+        Math.round(
+          rectangle.width
+        ),
+      height:
+        Math.round(
+          rectangle.height
+        )
+    };
 
     if (
-      isValidPanelGeometry(
-        storedGeometry
+      !isValidPanelGeometry(
+        geometry
       )
     ) {
-      geometry = storedGeometry;
-      cachedPanelGeometry =
-        storedGeometry;
+      return;
     }
-  } catch (error) {
-    console.warn(
-      "Could not read panel geometry:",
-      error
-    );
+
+    cachedPanelGeometry =
+      geometry;
+
+    try {
+      await chrome.storage.local.set({
+        [PANEL_GEOMETRY_KEY]:
+          geometry
+      });
+    } catch (error) {
+      console.warn(
+        "Could not save panel geometry:",
+        error
+      );
+    }
   }
-
-  if (
-    !isValidPanelGeometry(geometry) ||
-    !panel.isConnected
-  ) {
-    return;
-  }
-
-  const availableWidth =
-    Math.max(
-      280,
-      window.innerWidth - 12
-    );
-
-  const availableHeight =
-    Math.max(
-      180,
-      window.innerHeight - 12
-    );
-
-  const width = Math.min(
-    geometry.width,
-    availableWidth
-  );
-
-  const height = Math.min(
-    geometry.height,
-    availableHeight
-  );
-
-  const left = Math.min(
-    Math.max(0, geometry.left),
-    Math.max(
-      0,
-      window.innerWidth - width
-    )
-  );
-
-  const top = Math.min(
-    Math.max(0, geometry.top),
-    Math.max(
-      0,
-      window.innerHeight - height
-    )
-  );
-
-  panel.style.width = `${width}px`;
-  panel.style.height = `${height}px`;
-  panel.style.left = `${left}px`;
-  panel.style.top = `${top}px`;
-  panel.style.right = "auto";
-}
-
-function schedulePanelGeometrySave(
-  panel
-) {
-  if (
-    !panel ||
-    !panel.isConnected ||
-    !panel.__tamuGeometryReady
-  ) {
-    return;
-  }
-
-  clearTimeout(
-    panel.__tamuGeometrySaveTimer
-  );
-
-  panel.__tamuGeometrySaveTimer =
-    setTimeout(() => {
-      savePanelGeometry(panel);
-    }, 250);
-}
-
-async function savePanelGeometry(
-  panel
-) {
-  if (
-    !panel ||
-    !panel.isConnected ||
-    !panel.__tamuGeometryReady
-  ) {
-    return;
-  }
-
-  const rectangle =
-    panel.getBoundingClientRect();
-
-  const geometry = {
-    left: Math.round(rectangle.left),
-    top: Math.round(rectangle.top),
-    width: Math.round(rectangle.width),
-    height: Math.round(rectangle.height)
-  };
-
-  if (
-    !isValidPanelGeometry(geometry)
-  ) {
-    return;
-  }
-
-  cachedPanelGeometry = geometry;
-
-  try {
-    await chrome.storage.local.set({
-      [PANEL_GEOMETRY_KEY]:
-        geometry
-    });
-  } catch (error) {
-    console.warn(
-      "Could not save panel geometry:",
-      error
-    );
-  }
-}
 
   function keepPanelOnScreen(
     panel
   ) {
+    if (
+      !panel ||
+      !panel.isConnected
+    ) {
+      return;
+    }
+
     const rectangle =
       panel.getBoundingClientRect();
 
@@ -2139,6 +2198,50 @@ async function savePanelGeometry(
       panel.style.right =
         "auto";
     }
+  }
+
+  function scrollToNewestTranslation(
+    scrollingBody
+  ) {
+    if (!scrollingBody) {
+      return;
+    }
+
+    const scrollToBottom = (
+      behavior = "auto"
+    ) => {
+      if (
+        !scrollingBody.isConnected
+      ) {
+        return;
+      }
+
+      scrollingBody.scrollTo({
+        top:
+          scrollingBody.scrollHeight,
+        behavior
+      });
+    };
+
+    requestAnimationFrame(() => {
+      scrollToBottom("auto");
+
+      requestAnimationFrame(() => {
+        scrollToBottom("smooth");
+      });
+    });
+
+    setTimeout(() => {
+      scrollToBottom("smooth");
+    }, 150);
+
+    setTimeout(() => {
+      scrollToBottom("smooth");
+    }, 500);
+
+    setTimeout(() => {
+      scrollToBottom("smooth");
+    }, 1000);
   }
 
   function getOrderedHistory(
@@ -2505,33 +2608,34 @@ async function savePanelGeometry(
     );
   }
 
-function removeElement(id) {
-  const element =
-    document.getElementById(id);
+  function removeElement(id) {
+    const element =
+      document.getElementById(id);
 
-  if (!element) {
-    return;
+    if (!element) {
+      return;
+    }
+
+    clearTimeout(
+      element.__tamuGeometrySaveTimer
+    );
+
+    if (
+      element.__tamuResizeObserver
+    ) {
+      element
+        .__tamuResizeObserver
+        .disconnect();
+    }
+
+    if (
+      typeof element
+        .__tamuDragCleanup ===
+      "function"
+    ) {
+      element.__tamuDragCleanup();
+    }
+
+    element.remove();
   }
-
-  clearTimeout(
-    element.__tamuGeometrySaveTimer
-  );
-
-  if (
-    element.__tamuResizeObserver
-  ) {
-    element
-      .__tamuResizeObserver
-      .disconnect();
-  }
-
-  if (
-    typeof element.__tamuDragCleanup ===
-    "function"
-  ) {
-    element.__tamuDragCleanup();
-  }
-
-  element.remove();
-}
 })();
