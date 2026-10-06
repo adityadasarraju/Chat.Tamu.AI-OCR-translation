@@ -121,19 +121,25 @@ chrome.storage.local
         return true;
       }
 
-      if (message.type === "OCR_SHOW_STATUS") {
-        showResultPanel({
-          status:
-            message.message ||
-            "Working..."
-        });
+if (message.type === "OCR_SHOW_STATUS") {
+  showTranslationProgress({
+    message:
+      message.message ||
+      "Translating...",
 
-        sendResponse({
-          ok: true
-        });
+    history:
+      Array.isArray(message.history)
+        ? message.history
+        : []
+  });
+  
 
-        return;
-      }
+  sendResponse({
+    ok: true
+  });
+
+  return;
+}
 
       if (message.type === "OCR_SHOW_RESULT") {
         showResultPanel({
@@ -864,6 +870,7 @@ panel.__tamuGeometryReady = false;
       document.createElement(
         "div"
       );
+    
     scrollingBody.dataset.tamuHistoryScroll =
   "true";
 
@@ -964,6 +971,8 @@ panel.__tamuGeometryReady = false;
 
         emptyMessage.textContent =
           "No translation history yet.";
+        emptyMessage.dataset.tamuEmptyHistory =
+  "true";
 
         Object.assign(
           emptyMessage.style,
@@ -1078,6 +1087,8 @@ panel.__tamuGeometryReady = false;
         document.createElement(
           "div"
         );
+      actions.dataset.tamuHistoryActions =
+  "true";
 
       Object.assign(
         actions.style,
@@ -1203,6 +1214,40 @@ function scrollToNewestTranslation(
     }
 
     scrollingBody.scrollTo({
+      top:
+        scrollingBody.scrollHeight,
+      behavior
+    });
+  };
+
+  requestAnimationFrame(() => {
+    scrollToBottom("auto");
+
+    requestAnimationFrame(() => {
+      scrollToBottom("smooth");
+    });
+  });
+
+  /*
+   * History screenshots can finish loading after layout, so repeat the
+   * scroll to keep the progress card or newest translation visible.
+   */
+  setTimeout(() => {
+    scrollToBottom("smooth");
+  }, 150);
+
+  setTimeout(() => {
+    scrollToBottom("smooth");
+  }, 500);
+}
+  const scrollToBottom = (
+    behavior = "auto"
+  ) => {
+    if (!scrollingBody.isConnected) {
+      return;
+    }
+
+    scrollingBody.scrollTo({
       top: scrollingBody.scrollHeight,
       behavior
     });
@@ -1237,6 +1282,224 @@ function scrollToNewestTranslation(
   setTimeout(() => {
     scrollToBottom("smooth");
   }, 1000);
+}
+  function showTranslationProgress({
+  message,
+  history = []
+}) {
+  /*
+   * If the progress card is already visible, update only its message.
+   * This prevents the history panel from being rebuilt for every status
+   * update.
+   */
+  const existingProgress =
+    document.getElementById(
+      IDS.translationProgress
+    );
+
+  if (existingProgress) {
+    const existingMessage =
+      existingProgress.querySelector(
+        '[data-tamu-progress-message="true"]'
+      );
+
+    if (existingMessage) {
+      existingMessage.textContent =
+        message || "Translating...";
+    }
+
+    const existingBody =
+      document
+        .getElementById(
+          IDS.resultPanel
+        )
+        ?.querySelector(
+          '[data-tamu-history-scroll="true"]'
+        );
+
+    if (existingBody) {
+      scrollToNewestTranslation(
+        existingBody
+      );
+    }
+
+    return;
+  }
+
+  /*
+   * Render the existing translations first. This creates the normal
+   * draggable and resizable history panel.
+   */
+  showResultPanel({
+    history
+  });
+
+  const panel =
+    document.getElementById(
+      IDS.resultPanel
+    );
+
+  if (!panel) {
+    return;
+  }
+
+  const scrollingBody =
+    panel.querySelector(
+      '[data-tamu-history-scroll="true"]'
+    );
+
+  if (!scrollingBody) {
+    return;
+  }
+
+  /*
+   * Remove the empty-history message when processing the first
+   * translation.
+   */
+  scrollingBody
+    .querySelector(
+      '[data-tamu-empty-history="true"]'
+    )
+    ?.remove();
+
+  /*
+   * Hide the normal action buttons until the translation finishes.
+   * The final OCR_SHOW_RESULT message rebuilds the panel and restores them.
+   */
+  const actions =
+    scrollingBody.querySelector(
+      '[data-tamu-history-actions="true"]'
+    );
+
+  if (actions) {
+    actions.style.display = "none";
+  }
+
+  const progressWrapper =
+    document.createElement("div");
+
+  progressWrapper.id =
+    IDS.translationProgress;
+
+  progressWrapper.setAttribute(
+    "role",
+    "status"
+  );
+
+  progressWrapper.setAttribute(
+    "aria-live",
+    "polite"
+  );
+
+  Object.assign(
+    progressWrapper.style,
+    {
+      marginTop: "1em"
+    }
+  );
+
+  const progressLabel =
+    document.createElement("div");
+
+  progressLabel.textContent =
+    "New translation";
+
+  Object.assign(
+    progressLabel.style,
+    {
+      margin: "0 0 0.4em",
+      color: "#93c5fd",
+      fontSize: "0.72em",
+      fontWeight: "700",
+      lineHeight: "1.2",
+      textTransform: "uppercase",
+      letterSpacing: "0.04em"
+    }
+  );
+
+  const progressCard =
+    document.createElement("article");
+
+  Object.assign(
+    progressCard.style,
+    {
+      display: "flex",
+      alignItems: "center",
+      gap: "0.8em",
+      minHeight: "4.5em",
+      padding: "0.9em",
+      border:
+        "1px solid rgba(96, 165, 250, 0.75)",
+      borderRadius: "0.6em",
+      background: "#1f2937",
+      boxShadow:
+        "0 0 0 1px rgba(96, 165, 250, 0.12)"
+    }
+  );
+
+  const progressIcon =
+    document.createElement("div");
+
+  progressIcon.textContent = "⏳";
+
+  progressIcon.setAttribute(
+    "aria-hidden",
+    "true"
+  );
+
+  Object.assign(
+    progressIcon.style,
+    {
+      flex: "0 0 auto",
+      fontSize: "1.4em",
+      lineHeight: "1"
+    }
+  );
+
+  const progressText =
+    document.createElement("div");
+
+  progressText.dataset.tamuProgressMessage =
+    "true";
+
+  progressText.textContent =
+    message || "Translating...";
+
+  Object.assign(
+    progressText.style,
+    {
+      flex: "1 1 auto",
+      minWidth: "0",
+      color: "#bfdbfe",
+      fontSize: "1em",
+      fontWeight: "600",
+      lineHeight: "1.5",
+      whiteSpace: "pre-wrap",
+      overflowWrap: "anywhere"
+    }
+  );
+
+  progressCard.append(
+    progressIcon,
+    progressText
+  );
+
+  progressWrapper.append(
+    progressLabel,
+    progressCard
+  );
+
+  /*
+   * The progress card is appended after all existing translations, so it
+   * always appears at the bottom.
+   */
+  scrollingBody.appendChild(
+    progressWrapper
+  );
+
+  scrollToNewestTranslation(
+    scrollingBody
+  );
 }
   function createHistoryItem(entry) {
     const item =
