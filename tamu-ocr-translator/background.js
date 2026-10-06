@@ -11,11 +11,8 @@ const HISTORY_STORAGE_KEY =
 const PANEL_GEOMETRY_STORAGE_KEY =
   "translationPanelGeometry";
 
-const MAX_HISTORY_ITEMS = 10;
+const MAX_HISTORY_ITEMS = 5;
 
-/*
- * Handle messages from popup.js and content.js.
- */
 chrome.runtime.onMessage.addListener(
   (message, sender, sendResponse) => {
     if (
@@ -25,9 +22,6 @@ chrome.runtime.onMessage.addListener(
       return false;
     }
 
-    /*
-     * Start the page-selection tool.
-     */
     if (
       message.type ===
       "START_TRANSLATION_SELECTION"
@@ -55,9 +49,6 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
-    /*
-     * Open the saved translation history on the active webpage.
-     */
     if (
       message.type ===
       "SHOW_TRANSLATION_HISTORY"
@@ -86,9 +77,6 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
-    /*
-     * Return saved history without opening the panel.
-     */
     if (
       message.type ===
       "GET_TRANSLATION_HISTORY"
@@ -112,9 +100,6 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
-    /*
-     * Clear translation history while preserving panel geometry.
-     */
     if (
       message.type ===
       "CLEAR_TRANSLATION_HISTORY"
@@ -138,9 +123,6 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
-    /*
-     * Clear history and reset the panel's saved size and location.
-     */
     if (
       message.type ===
       "RESET_TRANSLATION_HISTORY"
@@ -169,9 +151,6 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
-    /*
-     * Process an area selected by content.js.
-     */
     if (
       message.type ===
         "OCR_REGION_SELECTED" &&
@@ -189,10 +168,6 @@ chrome.runtime.onMessage.addListener(
           error
         );
 
-        /*
-         * Include existing history so content.js can keep it visible
-         * if its error interface supports history.
-         */
         let history = [];
 
         try {
@@ -221,9 +196,6 @@ chrome.runtime.onMessage.addListener(
   }
 );
 
-/*
- * Start the rectangular selection interface on the active tab.
- */
 async function startSelection() {
   const tab =
     await getActiveSupportedTab();
@@ -246,9 +218,6 @@ async function startSelection() {
   }
 }
 
-/*
- * Display saved translation history without requiring a new translation.
- */
 async function showTranslationHistory() {
   const tab =
     await getActiveSupportedTab();
@@ -277,9 +246,6 @@ async function showTranslationHistory() {
   return history;
 }
 
-/*
- * Find the currently active tab and check that Chrome allows injection.
- */
 async function getActiveSupportedTab() {
   const [tab] =
     await chrome.tabs.query({
@@ -296,17 +262,35 @@ async function getActiveSupportedTab() {
   if (!isSupportedPage(tab.url)) {
     throw new Error(
       "Chrome does not allow this extension to run on this page. " +
-      "Open a normal website and try again."
+      "Open a normal HTTPS website and try again."
     );
   }
 
   return tab;
 }
 
-/*
- * Inject content.js. The script contains its own duplicate-load guard.
- */
 async function ensureContentScript(tabId) {
+  /*
+   * If content.js is already active, avoid injecting it again.
+   */
+  try {
+    const existingResponse =
+      await chrome.tabs.sendMessage(
+        tabId,
+        {
+          type: "OCR_PING"
+        }
+      );
+
+    if (existingResponse?.ok) {
+      return;
+    }
+  } catch {
+    /*
+     * No receiver exists yet. Inject content.js below.
+     */
+  }
+
   try {
     await chrome.scripting.executeScript({
       target: {
@@ -318,14 +302,51 @@ async function ensureContentScript(tabId) {
     });
   } catch (error) {
     throw new Error(
-      "Chrome could not load the translation interface on this page. " +
-      "Refresh the webpage and try again. Details: " +
+      "Chrome could not load content.js on this page. " +
+      "Try a normal HTTPS webpage. Details: " +
       (
         error?.message ||
         "Unknown injection error."
       )
     );
   }
+
+  /*
+   * Allow Chrome to register the new message listener.
+   */
+  await delay(100);
+
+  try {
+    const response =
+      await chrome.tabs.sendMessage(
+        tabId,
+        {
+          type: "OCR_PING"
+        }
+      );
+
+    if (!response?.ok) {
+      throw new Error(
+        "content.js did not answer."
+      );
+    }
+  } catch (error) {
+    throw new Error(
+      "content.js was injected but could not start. " +
+      "Check content.js for syntax errors and refresh the webpage. " +
+      "Details: " +
+      (
+        error?.message ||
+        "No receiving listener exists."
+      )
+    );
+  }
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }
 
 function isSupportedPage(url) {
@@ -349,12 +370,6 @@ function isSupportedPage(url) {
   );
 }
 
-/*
- * Capture, crop, translate, save, and display a selected region.
- *
- * Existing history is sent with each status update so content.js can show
- * progress at the bottom of the history panel rather than replacing it.
- */
 async function handleSelectedRegion({
   tabId,
   windowId,
@@ -367,7 +382,7 @@ async function handleSelectedRegion({
   }
 
   /*
-   * Capture before displaying progress so the extension interface is not
+   * Capture before showing progress so the extension panel is not
    * included in the screenshot.
    */
   const screenshotDataUrl =
@@ -392,8 +407,7 @@ async function handleSelectedRegion({
     await chrome.tabs.sendMessage(
       tabId,
       {
-        type:
-          "OCR_CROP_SCREENSHOT",
+        type: "OCR_CROP_SCREENSHOT",
         screenshotDataUrl,
         selection
       }
@@ -432,8 +446,8 @@ async function handleSelectedRegion({
     );
 
   /*
-   * The final result replaces the temporary progress card with the newest
-   * translation at the bottom of the history panel.
+   * content.js removes the temporary progress card and renders this as
+   * the newest translation at the bottom.
    */
   await sendMessageSafely(tabId, {
     type: "OCR_SHOW_RESULT",
@@ -442,9 +456,6 @@ async function handleSelectedRegion({
   });
 }
 
-/*
- * Retrieve sanitized history in oldest-to-newest order.
- */
 async function getTranslationHistory() {
   const stored =
     await chrome.storage.session.get([
@@ -494,9 +505,6 @@ async function getTranslationHistory() {
     .slice(-MAX_HISTORY_ITEMS);
 }
 
-/*
- * Add a successful translation and screenshot preview to history.
- */
 async function addTranslationToHistory(
   text,
   imageDataUrl
@@ -524,10 +532,6 @@ async function addTranslationToHistory(
       new Date().toISOString()
   };
 
-  /*
-   * Store history from oldest to newest and retain only the configured
-   * maximum number of entries.
-   */
   let updatedHistory = [
     ...existingHistory,
     newEntry
@@ -549,13 +553,13 @@ async function addTranslationToHistory(
     return updatedHistory;
   } catch (error) {
     console.warn(
-      "History exceeded storage limits. Removing older entries.",
+      "History exceeded storage limits. Removing old entries.",
       error
     );
   }
 
   /*
-   * Remove the oldest entries until the history fits in session storage.
+   * Remove the oldest entries until the image history fits.
    */
   while (updatedHistory.length > 1) {
     updatedHistory =
@@ -569,12 +573,14 @@ async function addTranslationToHistory(
 
       return updatedHistory;
     } catch {
-      // Continue removing old entries.
+      /*
+       * Continue removing old entries.
+       */
     }
   }
 
   /*
-   * Final fallback: save the newest text without its image.
+   * Final fallback: keep the newest translation without its image.
    */
   const textOnlyEntry = {
     ...newEntry,
@@ -592,18 +598,12 @@ async function addTranslationToHistory(
   ];
 }
 
-/*
- * Clear history but preserve panel size and location.
- */
 async function clearTranslationHistory() {
   await chrome.storage.session.remove(
     HISTORY_STORAGE_KEY
   );
 }
 
-/*
- * Clear history and reset the panel's saved geometry.
- */
 async function resetTranslationHistory() {
   await chrome.storage.session.remove(
     HISTORY_STORAGE_KEY
@@ -613,24 +613,25 @@ async function resetTranslationHistory() {
     PANEL_GEOMETRY_STORAGE_KEY
   );
 
-  /*
-   * Tell the active tab to close its panel and clear its in-memory geometry.
-   */
   const [tab] =
     await chrome.tabs.query({
       active: true,
       currentWindow: true
     });
 
-  if (tab?.id) {
-    await sendMessageSafely(
-      tab.id,
-      {
-        type:
-          "OCR_RESET_HISTORY_UI"
-      }
-    );
+  if (!tab?.id) {
+    return;
   }
+
+  /*
+   * The reset still succeeds if no content script currently exists.
+   */
+  await sendMessageSafely(
+    tab.id,
+    {
+      type: "OCR_RESET_HISTORY_UI"
+    }
+  );
 }
 
 function createHistoryId() {
@@ -660,9 +661,6 @@ function getHistoryTimestamp(entry) {
     : 0;
 }
 
-/*
- * Send the selected screenshot to TAMU AI for OCR and translation.
- */
 async function translateImage(
   imageDataUrl
 ) {
@@ -740,7 +738,7 @@ async function translateImage(
       );
 
     promptParts.push(
-      "Use the previous translations below only as context for continuity.",
+      "Use previous translations only as context for continuity.",
       "Keep names, pronouns, terminology, speaking style, tone, and ongoing dialogue consistent.",
       "Do not repeat or output the previous translations.",
       "Only output the translation of the newly attached image."
@@ -881,7 +879,7 @@ async function translateImage(
   if (finishReason === "length") {
     throw new Error(
       "The translation reached the model's output limit. " +
-      "Select a smaller region or try a model with a larger output limit."
+      "Select a smaller region or use a model with a larger output limit."
     );
   }
 
@@ -895,9 +893,6 @@ async function translateImage(
   return outputText.trim();
 }
 
-/*
- * Build bounded text-only context for Smooth Dialogue.
- */
 function buildDialogueContext(history) {
   if (!Array.isArray(history)) {
     return "";
@@ -916,7 +911,7 @@ function buildDialogueContext(history) {
       }
 
       /*
-       * Limit each entry so context does not grow without bound.
+       * Limit context size to control cost.
        */
       const shortenedText =
         text.length > 2500
@@ -932,9 +927,6 @@ function buildDialogueContext(history) {
     .join("\n\n");
 }
 
-/*
- * Parse JSON, server-sent events, or a plain-text response.
- */
 function parseApiResponse(rawResponse) {
   const trimmed =
     rawResponse.trim();
@@ -946,7 +938,9 @@ function parseApiResponse(rawResponse) {
   try {
     return JSON.parse(trimmed);
   } catch {
-    // Try compatible fallback formats below.
+    /*
+     * Try streaming and plain-text formats below.
+     */
   }
 
   if (
@@ -979,9 +973,6 @@ function parseApiResponse(rawResponse) {
   );
 }
 
-/*
- * Convert a server-sent event response to a chat-completion-like result.
- */
 function parseEventStreamResponse(
   rawResponse
 ) {
@@ -1084,9 +1075,6 @@ function appendContentParts(
   }
 }
 
-/*
- * Extract text from common OpenAI-compatible response shapes.
- */
 function extractChatCompletionText(data) {
   const content =
     data?.choices?.[0]
@@ -1130,9 +1118,6 @@ function extractChatCompletionText(data) {
   return "";
 }
 
-/*
- * Convert API failures into readable errors.
- */
 function createApiError(
   status,
   data,
@@ -1161,8 +1146,7 @@ function createApiError(
 
   if (status === 401) {
     return new Error(
-      "TAMU AI rejected the API key. " +
-      "Enter a valid, active key."
+      "TAMU AI rejected the API key. Enter a valid, active key."
     );
   }
 
@@ -1182,8 +1166,7 @@ function createApiError(
 
   if (status === 413) {
     return new Error(
-      "The selected screenshot was too large. " +
-      "Select a smaller area."
+      "The selected screenshot was too large. Select a smaller area."
     );
   }
 
@@ -1218,9 +1201,6 @@ function stringifyError(value) {
   }
 }
 
-/*
- * Send a tab message without crashing if the tab or content script is gone.
- */
 async function sendMessageSafely(
   tabId,
   message
