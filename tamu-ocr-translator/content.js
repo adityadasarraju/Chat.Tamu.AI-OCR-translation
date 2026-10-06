@@ -5,16 +5,22 @@
 
   window.__tamuOcrTranslatorLoaded = true;
 
-  const IDS = {
-    selectionOverlay:
-      "__tamu_ocr_selection_overlay",
-    selectionBox:
-      "__tamu_ocr_selection_box",
-    resultPanel:
-      "__tamu_ocr_result_panel",
-    imageModal:
-      "__tamu_ocr_image_modal"
-  };
+const IDS = {
+  selectionOverlay:
+    "__tamu_ocr_selection_overlay",
+
+  selectionBox:
+    "__tamu_ocr_selection_box",
+
+  resultPanel:
+    "__tamu_ocr_result_panel",
+
+  imageModal:
+    "__tamu_ocr_image_modal",
+
+  translationProgress:
+    "__tamu_ocr_translation_progress"
+};
  
   const PANEL_GEOMETRY_KEY =
   "translationPanelGeometry";
