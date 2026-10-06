@@ -1214,7 +1214,7 @@
     Object.assign(
       itemText.style,
       {
-        flex: "1 1 62%",
+        flex: "1 1 80%",
         minWidth: "0",
         maxHeight: "18em",
         overflow: "auto",
@@ -1259,7 +1259,7 @@
         previewButton.style,
         {
           position: "relative",
-          flex: "0 0 36%",
+          flex: "0 0 18%",
           minWidth: "5.5em",
           minHeight: "5em",
           alignSelf: "stretch",
