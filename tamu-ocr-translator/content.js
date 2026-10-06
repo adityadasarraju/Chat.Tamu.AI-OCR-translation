@@ -64,16 +64,87 @@ if (message.type === "OCR_CROP_SCREENSHOT") {
 
   return true;
 }
+      async function createHistoryPreview(
+  imageDataUrl
+) {
+  const image = await loadImage(
+    imageDataUrl
+  );
 
-      if (message.type === "OCR_SHOW_STATUS") {
-        showResultPanel({
-          status: message.message || "Working..."
-        });
+  /*
+   * Keep enough resolution for enlargement while controlling storage size.
+   */
+  const maximumWidth = 1000;
+  const maximumHeight = 1000;
 
-        sendResponse({
-          ok: true
-        });
+  const scale = Math.min(
+    1,
+    maximumWidth / image.naturalWidth,
+    maximumHeight / image.naturalHeight
+  );
 
+  const width = Math.max(
+    1,
+    Math.round(
+      image.naturalWidth * scale
+    )
+  );
+
+  const height = Math.max(
+    1,
+    Math.round(
+      image.naturalHeight * scale
+    )
+  );
+
+  const canvas =
+    document.createElement("canvas");
+
+  canvas.width = width;
+  canvas.height = height;
+
+  const context =
+    canvas.getContext("2d");
+
+  if (!context) {
+    /*
+     * Fall back to the original crop if preview generation is unavailable.
+     */
+    return imageDataUrl;
+  }
+
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality =
+    "high";
+
+  context.drawImage(
+    image,
+    0,
+    0,
+    width,
+    height
+  );
+
+  /*
+   * JPEG at 75% quality keeps five previews reasonably small.
+   */
+  return canvas.toDataURL(
+    "image/jpeg",
+    0.75
+  );
+}
+
+if (message.type === "OCR_SHOW_RESULT") {
+  showResultPanel({
+    text: message.text,
+    error: message.error,
+    history: message.history
+  });
+
+  sendResponse({
+    ok: true
+  });
+}
         return;
       }
 
@@ -472,6 +543,466 @@ function showResultPanel({
     top: "18px",
     right: "18px",
     zIndex: "2147483647",
+    width: "min(480px, calc(100vw - 36px))",
+    maxHeight: "calc(100vh - 36px)",
+    overflow: "auto",
+    boxSizing: "border-box",
+    padding: "16px",
+    border:
+      "1px solid rgba(255, 255, 255, 0.14)",
+    borderRadius: "12px",
+    background: "#111827",
+    color: "#f9fafb",
+    boxShadow:
+      "0 18px 60px rgba(0, 0, 0, 0.45)",
+    font: "14px/1.55 system-ui, sans-serif"
+  });
+
+  /*
+   * Header
+   */
+  const header =
+    document.createElement("div");
+
+  Object.assign(header.style, {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    marginBottom: "12px"
+  });
+
+  const title =
+    document.createElement("strong");
+
+  if (error) {
+    title.textContent = "Translation error";
+  } else if (status) {
+    title.textContent = "TAMU OCR Translator";
+  } else {
+    title.textContent = "Translation history";
+  }
+
+  Object.assign(title.style, {
+    color: "#f9fafb",
+    font: "700 16px system-ui, sans-serif"
+  });
+
+  const closeButton =
+    document.createElement("button");
+
+  closeButton.type = "button";
+  closeButton.textContent = "×";
+
+  closeButton.setAttribute(
+    "aria-label",
+    "Close translator"
+  );
+
+  Object.assign(closeButton.style, {
+    width: "30px",
+    height: "30px",
+    flex: "0 0 auto",
+    padding: "0",
+    border: "0",
+    borderRadius: "6px",
+    cursor: "pointer",
+    background: "#374151",
+    color: "#ffffff",
+    font: "22px/30px system-ui, sans-serif"
+  });
+
+  closeButton.addEventListener(
+    "mouseenter",
+    () => {
+      closeButton.style.background =
+        "#4b5563";
+    }
+  );
+
+  closeButton.addEventListener(
+    "mouseleave",
+    () => {
+      closeButton.style.background =
+        "#374151";
+    }
+  );
+
+  closeButton.addEventListener(
+    "click",
+    () => {
+      removeElement(IDS.imageModal);
+      panel.remove();
+    }
+  );
+
+  header.append(
+    title,
+    closeButton
+  );
+
+  panel.appendChild(header);
+
+  /*
+   * Display an error or loading status.
+   */
+  if (error || status) {
+    const message =
+      document.createElement("div");
+
+    message.textContent =
+      error || status;
+
+    Object.assign(message.style, {
+      padding: "4px 0",
+      color: error
+        ? "#fca5a5"
+        : "#93c5fd",
+      whiteSpace: "pre-wrap",
+      overflowWrap: "anywhere"
+    });
+
+    panel.appendChild(message);
+  } else {
+    /*
+     * Copy and sort history defensively so the oldest translation is first
+     * and the newest translation is last.
+     */
+    const orderedHistory = Array.isArray(history)
+      ? [...history].sort((first, second) => {
+          const firstTime =
+            new Date(
+              first?.createdAt || 0
+            ).getTime();
+
+          const secondTime =
+            new Date(
+              second?.createdAt || 0
+            ).getTime();
+
+          const safeFirstTime =
+            Number.isFinite(firstTime)
+              ? firstTime
+              : 0;
+
+          const safeSecondTime =
+            Number.isFinite(secondTime)
+              ? secondTime
+              : 0;
+
+          return (
+            safeFirstTime -
+            safeSecondTime
+          );
+        })
+      : [];
+
+    /*
+     * If history was not provided, still show the current translation.
+     */
+    if (
+      orderedHistory.length === 0 &&
+      typeof text === "string" &&
+      text.trim()
+    ) {
+      orderedHistory.push({
+        id: `temporary-${Date.now()}`,
+        text: text.trim(),
+        imageDataUrl: "",
+        createdAt:
+          new Date().toISOString()
+      });
+    }
+
+    if (orderedHistory.length === 0) {
+      const emptyMessage =
+        document.createElement("div");
+
+      emptyMessage.textContent =
+        "No translation was returned.";
+
+      Object.assign(emptyMessage.style, {
+        color: "#94a3b8",
+        font:
+          "12px/1.45 system-ui, sans-serif"
+      });
+
+      panel.appendChild(emptyMessage);
+    } else {
+      const historyContainer =
+        document.createElement("div");
+
+      Object.assign(
+        historyContainer.style,
+        {
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px"
+        }
+      );
+
+      orderedHistory.forEach(
+        (entry, index) => {
+          const wrapper =
+            document.createElement("div");
+
+          const isNewest =
+            index ===
+            orderedHistory.length - 1;
+
+          /*
+           * Label the last item as the newest translation.
+           */
+          const entryLabel =
+            document.createElement("div");
+
+          entryLabel.textContent =
+            isNewest
+              ? "Newest translation"
+              : index === 0
+                ? "Oldest translation"
+                : "Previous translation";
+
+          Object.assign(
+            entryLabel.style,
+            {
+              margin:
+                index === 0
+                  ? "0 0 5px"
+                  : "3px 0 5px",
+              color: isNewest
+                ? "#93c5fd"
+                : "#94a3b8",
+              font:
+                "700 10px system-ui, sans-serif",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em"
+            }
+          );
+
+          /*
+           * createHistoryItem() displays the screenshot, time,
+           * translation, and per-item Copy button.
+           */
+          const historyItem =
+            createHistoryItem(
+              entry,
+              index
+            );
+
+          if (isNewest) {
+            Object.assign(
+              historyItem.style,
+              {
+                border:
+                  "1px solid rgba(96, 165, 250, 0.7)",
+                boxShadow:
+                  "0 0 0 1px rgba(96, 165, 250, 0.12)"
+              }
+            );
+          }
+
+          wrapper.append(
+            entryLabel,
+            historyItem
+          );
+
+          historyContainer.appendChild(
+            wrapper
+          );
+        }
+      );
+
+      panel.appendChild(
+        historyContainer
+      );
+    }
+
+    /*
+     * Main action buttons.
+     */
+    const actions =
+      document.createElement("div");
+
+    Object.assign(actions.style, {
+      position: "sticky",
+      bottom: "0",
+      display: "flex",
+      gap: "8px",
+      marginTop: "14px",
+      paddingTop: "12px",
+      background: "#111827"
+    });
+
+    /*
+     * New Translation button appears on the left.
+     */
+    const newTranslationButton =
+      document.createElement("button");
+
+    newTranslationButton.type = "button";
+    newTranslationButton.textContent =
+      "New translation";
+
+    Object.assign(
+      newTranslationButton.style,
+      {
+        flex: "1",
+        minWidth: "0",
+        padding: "9px 12px",
+        border: "0",
+        borderRadius: "7px",
+        cursor: "pointer",
+        background: "#374151",
+        color: "#ffffff",
+        font:
+          "600 12px system-ui, sans-serif"
+      }
+    );
+
+    newTranslationButton.addEventListener(
+      "mouseenter",
+      () => {
+        newTranslationButton.style.background =
+          "#4b5563";
+      }
+    );
+
+    newTranslationButton.addEventListener(
+      "mouseleave",
+      () => {
+        newTranslationButton.style.background =
+          "#374151";
+      }
+    );
+
+    newTranslationButton.addEventListener(
+      "click",
+      () => {
+        removeElement(IDS.imageModal);
+        panel.remove();
+        startSelection();
+      }
+    );
+
+    /*
+     * Copy Translation button copies the newest translation.
+     */
+    const copyButton =
+      document.createElement("button");
+
+    copyButton.type = "button";
+    copyButton.textContent =
+      "Copy translation";
+
+    Object.assign(copyButton.style, {
+      flex: "1",
+      minWidth: "0",
+      padding: "9px 12px",
+      border: "0",
+      borderRadius: "7px",
+      cursor: "pointer",
+      background: "#2563eb",
+      color: "#ffffff",
+      font:
+        "600 12px system-ui, sans-serif"
+    });
+
+    copyButton.addEventListener(
+      "mouseenter",
+      () => {
+        copyButton.style.background =
+          "#1d4ed8";
+      }
+    );
+
+    copyButton.addEventListener(
+      "mouseleave",
+      () => {
+        copyButton.style.background =
+          "#2563eb";
+      }
+    );
+
+    copyButton.addEventListener(
+      "click",
+      async () => {
+        /*
+         * Prefer the newest history entry. Fall back to the text supplied
+         * directly with the result message.
+         */
+        const newestEntry =
+          orderedHistory[
+            orderedHistory.length - 1
+          ];
+
+        const newestTranslation =
+          newestEntry?.text ||
+          text ||
+          "";
+
+        try {
+          await navigator.clipboard.writeText(
+            newestTranslation
+          );
+
+          copyButton.textContent =
+            "Copied";
+
+          setTimeout(() => {
+            if (copyButton.isConnected) {
+              copyButton.textContent =
+                "Copy translation";
+            }
+          }, 1500);
+        } catch {
+          copyButton.textContent =
+            "Copy failed";
+
+          setTimeout(() => {
+            if (copyButton.isConnected) {
+              copyButton.textContent =
+                "Copy translation";
+            }
+          }, 1500);
+        }
+      }
+    );
+
+    actions.append(
+      newTranslationButton,
+      copyButton
+    );
+
+    panel.appendChild(actions);
+  }
+
+  document.documentElement.appendChild(
+    panel
+  );
+
+  /*
+   * Automatically scroll to the bottom so the newest translation is visible.
+   */
+  if (!error && !status) {
+    requestAnimationFrame(() => {
+      panel.scrollTop =
+        panel.scrollHeight;
+    });
+  }
+} {
+  removeElement(IDS.resultPanel);
+
+  const panel =
+    document.createElement("section");
+
+  panel.id = IDS.resultPanel;
+
+  Object.assign(panel.style, {
+    position: "fixed",
+    top: "18px",
+    right: "18px",
+    zIndex: "2147483647",
     width: "min(460px, calc(100vw - 36px))",
     maxHeight: "calc(100vh - 36px)",
     overflow: "auto",
@@ -791,6 +1322,354 @@ function createHistoryItem(
   entry,
   index
 ) {
+  const item =
+    document.createElement("article");
+
+  Object.assign(item.style, {
+    marginTop:
+      index === 0 ? "0" : "10px",
+    padding: "10px",
+    border:
+      "1px solid rgba(255, 255, 255, 0.1)",
+    borderRadius: "8px",
+    background: "#1f2937"
+  });
+
+  if (entry?.imageDataUrl) {
+    const previewButton =
+      document.createElement("button");
+
+    previewButton.type = "button";
+    previewButton.title =
+      "Click to enlarge screenshot";
+
+    previewButton.setAttribute(
+      "aria-label",
+      "Enlarge the selected screenshot"
+    );
+
+    Object.assign(
+      previewButton.style,
+      {
+        display: "block",
+        width: "100%",
+        margin: "0 0 9px",
+        padding: "0",
+        border:
+          "1px solid rgba(255, 255, 255, 0.12)",
+        borderRadius: "7px",
+        overflow: "hidden",
+        cursor: "zoom-in",
+        background: "#0f172a"
+      }
+    );
+
+    const previewImage =
+      document.createElement("img");
+
+    previewImage.src =
+      entry.imageDataUrl;
+
+    previewImage.alt =
+      "Screenshot used for this translation";
+
+    Object.assign(
+      previewImage.style,
+      {
+        display: "block",
+        width: "100%",
+        maxHeight: "150px",
+        objectFit: "contain",
+        background: "#0f172a"
+      }
+    );
+
+    previewButton.appendChild(
+      previewImage
+    );
+
+    previewButton.addEventListener(
+      "click",
+      () => {
+        showEnlargedImage(
+          entry.imageDataUrl,
+          entry.text
+        );
+      }
+    );
+
+    item.appendChild(previewButton);
+  }
+
+  const itemHeader =
+    document.createElement("div");
+
+  Object.assign(itemHeader.style, {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
+    marginBottom: "6px"
+  });
+
+  const time =
+    document.createElement("span");
+
+  time.textContent =
+    formatHistoryTime(
+      entry?.createdAt
+    );
+
+  Object.assign(time.style, {
+    color: "#94a3b8",
+    font:
+      "10px system-ui, sans-serif"
+  });
+
+  const copyHistoryButton =
+    document.createElement("button");
+
+  copyHistoryButton.type = "button";
+  copyHistoryButton.textContent =
+    "Copy";
+
+  Object.assign(
+    copyHistoryButton.style,
+    {
+      padding: "4px 8px",
+      border: "0",
+      borderRadius: "5px",
+      cursor: "pointer",
+      background: "#374151",
+      color: "#ffffff",
+      font:
+        "600 10px system-ui, sans-serif"
+    }
+  );
+
+  copyHistoryButton.addEventListener(
+    "click",
+    async () => {
+      try {
+        await navigator.clipboard.writeText(
+          entry?.text || ""
+        );
+
+        copyHistoryButton.textContent =
+          "Copied";
+
+        setTimeout(() => {
+          if (
+            copyHistoryButton.isConnected
+          ) {
+            copyHistoryButton.textContent =
+              "Copy";
+          }
+        }, 1500);
+      } catch {
+        copyHistoryButton.textContent =
+          "Failed";
+      }
+    }
+  );
+
+  itemHeader.append(
+    time,
+    copyHistoryButton
+  );
+
+  const itemText =
+    document.createElement("div");
+
+  itemText.textContent =
+    entry?.text ||
+    "No translation text.";
+
+  Object.assign(itemText.style, {
+    maxHeight: "120px",
+    overflow: "auto",
+    color: "#d1d5db",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+    font:
+      "12px/1.45 system-ui, sans-serif"
+  });
+
+  item.append(
+    itemHeader,
+    itemText
+  );
+
+  return item;
+}
+function showEnlargedImage(
+  imageDataUrl,
+  translationText = ""
+) {
+  removeElement(IDS.imageModal);
+
+  const modal =
+    document.createElement("div");
+
+  modal.id = IDS.imageModal;
+
+  Object.assign(modal.style, {
+    position: "fixed",
+    inset: "0",
+    zIndex: "2147483647",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "24px",
+    boxSizing: "border-box",
+    background: "rgba(0, 0, 0, 0.86)",
+    cursor: "zoom-out"
+  });
+
+  const modalContent =
+    document.createElement("div");
+
+  Object.assign(modalContent.style, {
+    position: "relative",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "12px",
+    maxWidth: "95vw",
+    maxHeight: "95vh",
+    cursor: "default"
+  });
+
+  const enlargedImage =
+    document.createElement("img");
+
+  enlargedImage.src = imageDataUrl;
+  enlargedImage.alt =
+    "Enlarged screenshot used for translation";
+
+  Object.assign(
+    enlargedImage.style,
+    {
+      display: "block",
+      maxWidth: "95vw",
+      maxHeight: "80vh",
+      objectFit: "contain",
+      borderRadius: "8px",
+      background: "#ffffff",
+      boxShadow:
+        "0 20px 70px rgba(0, 0, 0, 0.6)"
+    }
+  );
+
+  const closeButton =
+    document.createElement("button");
+
+  closeButton.type = "button";
+  closeButton.textContent = "×";
+  closeButton.setAttribute(
+    "aria-label",
+    "Close enlarged screenshot"
+  );
+
+  Object.assign(
+    closeButton.style,
+    {
+      position: "absolute",
+      top: "-16px",
+      right: "-16px",
+      width: "38px",
+      height: "38px",
+      padding: "0",
+      border:
+        "1px solid rgba(255, 255, 255, 0.2)",
+      borderRadius: "50%",
+      cursor: "pointer",
+      background: "#111827",
+      color: "#ffffff",
+      boxShadow:
+        "0 8px 24px rgba(0, 0, 0, 0.45)",
+      font:
+        "26px/36px system-ui, sans-serif"
+    }
+  );
+
+  closeButton.addEventListener(
+    "click",
+    () => {
+      closeModal();
+    }
+  );
+
+  modalContent.append(
+    enlargedImage,
+    closeButton
+  );
+
+  if (translationText) {
+    const caption =
+      document.createElement("div");
+
+    caption.textContent =
+      translationText;
+
+    Object.assign(caption.style, {
+      width: "min(800px, 90vw)",
+      maxHeight: "110px",
+      overflow: "auto",
+      boxSizing: "border-box",
+      padding: "10px 12px",
+      borderRadius: "8px",
+      background: "#111827",
+      color: "#f3f4f6",
+      whiteSpace: "pre-wrap",
+      overflowWrap: "anywhere",
+      font:
+        "13px/1.45 system-ui, sans-serif"
+    });
+
+    modalContent.appendChild(
+      caption
+    );
+  }
+
+  modal.appendChild(modalContent);
+
+  modal.addEventListener(
+    "click",
+    (event) => {
+      if (event.target === modal) {
+        closeModal();
+      }
+    }
+  );
+
+  const onKeyDown = (event) => {
+    if (event.key === "Escape") {
+      closeModal();
+    }
+  };
+
+  function closeModal() {
+    document.removeEventListener(
+      "keydown",
+      onKeyDown,
+      true
+    );
+
+    modal.remove();
+  }
+
+  document.addEventListener(
+    "keydown",
+    onKeyDown,
+    true
+  );
+
+  document.documentElement.appendChild(
+    modal
+  );
+}
+{
   const item =
     document.createElement("div");
 
